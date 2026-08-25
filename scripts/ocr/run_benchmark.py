@@ -238,12 +238,12 @@ def run_ocr_benchmark_and_publish(
         )
 
 
-def main(config_path: str, data_dir: str, output_dir: str):
+def main(config_path: str, data_dir: str, output_dir: str, month: str | None = None):
     logger.info("Loading OCR engine from config: %s", config_path)
     ocr_engine = load_engine(config_path)
     engine_name = Path(config_path).stem
     logger.info("Running OCR benchmark with engine: %s", engine_name)
-    run_ocr_benchmark(ocr_engine, engine_name, data_dir, Path(output_dir))
+    run_ocr_benchmark(ocr_engine, engine_name, data_dir, Path(output_dir), month=month)
 
 
 if __name__ == "__main__":
@@ -262,5 +262,11 @@ if __name__ == "__main__":
         required=True,
         help="Directory to save output JSONs (one per document)",
     )
+    parser.add_argument(
+        "--month",
+        type=str,
+        default=None,
+        help="Period YYYY-MM (default: inferred from --data_dir)",
+    )
     args = parser.parse_args()
-    main(args.config, args.data_dir, args.output_dir)
+    main(args.config, args.data_dir, args.output_dir, month=args.month)

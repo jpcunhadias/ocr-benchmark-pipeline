@@ -49,7 +49,7 @@ def run_ocr(config_path: str, data_dir: str, output_dir: str):
     results = []
     for img_path in image_files:
         try:
-            result = engine.process_image(str(img_path))
+            result = engine.predict(str(img_path))
             results.append({"image_path": str(img_path), "ocr_result": result})
             print(f"Processed: {img_path.name}")
         except Exception as e:
@@ -64,8 +64,8 @@ def run_ocr(config_path: str, data_dir: str, output_dir: str):
 
 
 def extract_fields(results_dir: str, engine: str):
-    """Extract structured fields from OCR results."""
-    print(f"Extracting fields from {results_dir}")
+    """Clean the raw OCR text for each page and write it to a text file."""
+    print(f"Extracting text from {results_dir}")
 
     results_file = Path(results_dir) / "ocr_results.json"
 
@@ -73,14 +73,17 @@ def extract_fields(results_dir: str, engine: str):
         print(f"No results file found at {results_file}")
         return
 
+    from src.data.preprocess import preprocess_ocr_text
+
     with open(results_file) as f:
         results = json.load(f)
 
     extracted_file = Path(results_dir) / "extracted_text.txt"
     with open(extracted_file, "w") as f:
         for result in results:
+            raw_text = (result.get("ocr_result") or {}).get("text", "")
             f.write(f"=== {result['image_path']} ===\n")
-            f.write(f"{result['ocr_result']}\n\n")
+            f.write(f"{preprocess_ocr_text(raw_text)}\n\n")
 
     print(f"Text extraction completed. Saved to {extracted_file}")
 

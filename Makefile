@@ -99,7 +99,7 @@ ocr:
 	docker-compose exec app python scripts/ocr/run_benchmark.py \
 		--config configs/engines/$(ENGINE).yaml \
 		--data_dir $(DATA_DIR) \
-		--output_dir results/$(ENGINE) \
+		--output_dir results/$(ENGINE)/$(MONTH) \
 		$(if $(MONTH),--month $(MONTH),)
 
 extract:

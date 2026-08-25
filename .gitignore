@@ -203,6 +203,9 @@ data/**
 !data/**/
 !data/**/.gitkeep
 
+# Except the synthetic sample PDF used to run the pipeline out of the box
+!data/pdf/2025-04/sample-report/**
+
 results/**
 !results/**/
 results/**/.gitkeep

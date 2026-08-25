@@ -55,7 +55,7 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
 
             results.append(
                 {
-                    "timestamp": pd.Timestamp.utcnow(),  # import pandas as pd at top of file
+                    "timestamp": pd.Timestamp.now("UTC"),
                     "document": doc,
                     "engine": ocr_result.get("engine") or "",
                     "page": page_no,

@@ -95,7 +95,7 @@ def build_extractions_df(
             page_iter = ((_normalize_page_no(k), v) for k, v in items)
         elif isinstance(pages, list):
             page_iter = (
-                (p.get("page_no") or p.get("page_number") or i + 1, p)
+                (p.get("page") or p.get("page_no") or p.get("page_number") or i + 1, p)
                 for i, p in enumerate(pages)
             )
         else:
@@ -111,7 +111,7 @@ def build_extractions_df(
 
             rows.append(
                 {
-                    "timestamp": pd.Timestamp.utcnow(),
+                    "timestamp": pd.Timestamp.now("UTC"),
                     "document": document_id,
                     "page": int(page_no) if page_no not in (None, -1) else None,
                     "raw_text": raw_text,
@@ -172,3 +172,34 @@ def run_extraction_stage(
         )
 
     return df
+
+
+if __name__ == "__main__":
+    import argparse
+    import uuid
+
+    parser = argparse.ArgumentParser(
+        description="Clean raw OCR JSON output and store extracted text"
+    )
+    parser.add_argument("--engine", required=True, help="OCR engine name")
+    parser.add_argument("--month", required=True, help="Period YYYY-MM")
+    parser.add_argument(
+        "--results_dir", default="results", help="Root results directory"
+    )
+    parser.add_argument(
+        "--document-folder", default=None, help="Restrict to a single document folder"
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Run ID to tag extractions with (default: a generated UUID)",
+    )
+    args = parser.parse_args()
+
+    run_extraction_stage(
+        run_id=args.run_id or uuid.uuid4().hex,
+        engine=args.engine,
+        month=args.month,
+        results_dir=args.results_dir,
+        document_folder=args.document_folder,
+    )

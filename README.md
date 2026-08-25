@@ -27,7 +27,28 @@ The design here is deliberately pluggable: adding a new OCR engine means impleme
 
 ---
 
-## 2 · Setup & Installation
+## 2 · Try It Out (Sample Data)
+
+A synthetic sample document ships with the repo at `data/pdf/2025-04/sample-report/`, so you can run the whole pipeline without any external data or services:
+
+```bash
+# 1. Install the core OCR dependencies (opencv, pytesseract, pdf2image, pillow, pyyaml, pandas, tqdm, psutil, python-dotenv, numpy)
+pip install -r requirements.txt   # or use ./setup_local_dev.sh
+
+# 2. Run the pipeline end-to-end against the sample PDF
+python run_local_pipeline.py --step all --engine tesseract --input data/pdf/2025-04/sample-report
+
+# 3. Check the result
+cat results/tesseract/sample-report/extracted_text.txt
+```
+
+This requires the `tesseract` and `poppler` (for `pdftoppm`) system binaries — see [§3](#3--setup--installation) for install instructions, or use Docker to get them for free.
+
+The sample document was generated with `scripts/data_prep/generate_sample_data.py`, which you can also use to produce more (or different) synthetic pages for testing.
+
+---
+
+## 3 · Setup & Installation
 
 ### Docker-Based Setup
 
@@ -81,7 +102,7 @@ python run_local_pipeline.py --step all --engine tesseract
 
 ---
 
-## 3 · Usage
+## 4 · Usage
 
 ### Streamlit Dashboard (Main Interface)
 
@@ -215,7 +236,7 @@ Outputs are saved under the `results/<engine-name>/` directory.
 
 ---
 
-## 4 · Adding a New OCR Engine
+## 5 · Adding a New OCR Engine
 
 To add support for a new OCR engine, follow these three steps:
 
@@ -237,18 +258,19 @@ To add support for a new OCR engine, follow these three steps:
             return {"text": "extracted text", "confidence": 0.95, "engine": "MyEngine"}
     ```
 
-3.  **Register the engine**: Add your new engine to `ENGINE_MAP` in `src/ocr_engines/utils.py`. This lets the pipeline find and load your class.
+3.  **Register the engine**: Add a loader for your new engine to `ENGINE_LOADERS` in `src/ocr_engines/utils.py`. Each loader imports its engine's class lazily, so an engine's dependencies (e.g. EasyOCR's `torch`) are only pulled in when that engine is actually used.
 
     ```python
     # src/ocr_engines/utils.py
-    from .easyocr_engine import EasyOCREngine
-    from .tesseract_engine import TesseractEngine
-    from .myengine_engine import MyEngine  # 1. Import your class
+    def _load_myengine_engine():
+        from src.ocr_engines.myengine_engine import MyEngine
 
-    ENGINE_MAP = {
-        "tesseract": TesseractEngine,
-        "easyocr": EasyOCREngine,
-        "myengine": MyEngine,  # 2. Add it to the dict
+        return MyEngine
+
+    ENGINE_LOADERS = {
+        "tesseract": _load_tesseract_engine,
+        "easyocr": _load_easyocr_engine,
+        "myengine": _load_myengine_engine,  # Add it to the dict
     }
     ```
 
@@ -260,7 +282,7 @@ make run ENGINE=myengine
 
 ---
 
-## 5 · Developer Commands (`Makefile`)
+## 6 · Developer Commands (`Makefile`)
 
 The `Makefile` provides convenient shortcuts for common tasks.
 
