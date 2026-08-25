@@ -1,0 +1,28 @@
+# VCS & OS
+.git
+.gitignore
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv
+venv
+.env
+.env.*
+!.env.common
+!.env.local
+!.env.api.local
+!.env.prod
+
+# Data & results (mounted at runtime)
+data/pdf/
+data/processed/
+results/
+notebooks/.ipynb_checkpoints
+
+# Build artifacts
+dist/
+build/
+.wheels/

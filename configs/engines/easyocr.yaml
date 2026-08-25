@@ -1,0 +1,9 @@
+# EasyOCR engine configuration
+
+# List of languages to recognize
+lang_list:
+  - pt
+  - en
+
+# Use GPU if available (set to true if you want to use CUDA)
+gpu: false

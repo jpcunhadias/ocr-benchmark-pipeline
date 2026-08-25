@@ -1,0 +1,289 @@
+# OCR Benchmark Pipeline & Dashboard
+
+This project provides a fully containerized pipeline for benchmarking OCR engines against scanned documents, plus a web dashboard for browsing the results.
+
+It automates the whole workflow:
+1.  **Ingestion**: Downloads PDFs from a MinIO object store.
+2.  **Processing**: Converts PDF pages into PNG images.
+3.  **OCR extraction**: Runs a selected OCR engine (e.g. Tesseract, PaddleOCR, EasyOCR) on the images.
+4.  **Storage**: Saves structured run metadata to PostgreSQL and raw JSON output to MongoDB.
+5.  **API**: Exposes a FastAPI backend for querying all results.
+6.  **Analysis & visualization**: Provides a Streamlit dashboard for browsing runs and extracted text.
+
+---
+
+## 1 · Architecture
+
+The whole system is orchestrated with Docker Compose and made up of the following services:
+
+-   **`app`**: The main Python container where pipeline tasks run.
+-   **`api`**: A FastAPI backend that serves data from the databases.
+-   **`streamlit`**: A web-based dashboard for interactive browsing.
+-   **`postgres`**: A PostgreSQL database storing structured pipeline-run metadata.
+-   **`mongo`**: A MongoDB database storing raw, unstructured OCR JSON output.
+-   **`minio`**: An S3-compatible object store for input PDFs.
+
+The design here is deliberately pluggable: adding a new OCR engine means implementing one small interface (`BaseOCREngine`) and registering it — the rest of the pipeline (conversion, benchmarking, storage, API, dashboard) is engine-agnostic. See [§5](#5--adding-a-new-ocr-engine).
+
+---
+
+## 2 · Setup & Installation
+
+### Docker-Based Setup
+
+For full-stack development with all services:
+
+### Prerequisites
+
+-   Docker and Docker Compose
+-   Copy the example env files and adjust as needed:
+    ```bash
+    cp env.common.example .env.common
+    cp env.local.example .env.local
+    cp env.api.local.example .env.api.local
+    ```
+
+### Running the System
+
+The whole stack can be started with a single command:
+
+```bash
+make docker-up
+```
+
+This starts all services in the background. You can then access:
+
+-   **Streamlit dashboard**: `http://localhost:8501`
+-   **FastAPI backend**: `http://localhost:8080`
+-   **MinIO console**: `http://localhost:9001`
+
+### Native/Local Development (No Docker)
+
+For lightweight development focused on OCR processing, without any databases:
+
+```bash
+# Set up the local environment
+./setup_local_dev.sh
+
+# Activate the environment
+source venv/bin/activate
+export $(cat .env.local | xargs)
+
+# Run the local pipeline
+python run_local_pipeline.py --step all --engine tesseract
+```
+
+**Local development features:**
+- **No Docker required**: Runs Python directly
+- **No databases**: File-based processing only
+- **Fast iteration**: Quickly test OCR engines and preprocessing logic
+- **Minimal dependencies**: Only core OCR functionality
+
+---
+
+## 3 · Usage
+
+### Streamlit Dashboard (Main Interface)
+
+The primary way to interact with the system is the Streamlit dashboard.
+
+Navigate to `http://localhost:8501` to:
+
+-   **Browse runs**: See run history and status.
+-   **Explore extracted text**: Browse the cleaned OCR text extracted per page for a given run.
+
+### Running the Pipeline via CLI
+
+You can run the pipeline from the command line in two ways: a **fully automated pipeline**, or **manual step-by-step execution**.
+
+#### Full Pipeline (Recommended)
+
+**Default Run (Tesseract)**
+```bash
+# Runs the full pipeline: download → convert → OCR → extract → publish
+make run
+```
+
+**Run with a Specific Engine**
+```bash
+# 'engine' must match a config file under configs/engines/
+make run ENGINE=paddleocr
+```
+
+**Offline Mode**
+```bash
+# First, download PDFs from MinIO to local storage
+make download
+
+# Then run the full pipeline offline using the downloaded PDFs
+make run ENGINE=tesseract OFFLINE=1
+```
+
+`make run` automatically runs the whole pipeline:
+1. **Download**: Fetches PDFs from MinIO (skipped if offline)
+2. **Convert**: Turns PDFs into PNG images
+3. **OCR**: Processes images with the selected engine
+4. **Extract**: Cleans OCR text and stores it per page
+5. **Publish**: Saves results to PostgreSQL/MongoDB (skipped if offline)
+
+#### Manual Step-by-Step Execution
+
+For development or troubleshooting, you can run individual pipeline steps:
+
+```bash
+# 1. Interactively download PDFs from MinIO
+make download
+
+# 2. Convert PDFs to images (requires SUBFOLDER=<folder_name>)
+make convert SUBFOLDER=<document_folder>
+
+# 3. Run OCR on converted images
+make ocr ENGINE=tesseract MONTH=2025-04
+
+# 4. Clean OCR output and store extracted text
+make extract ENGINE=tesseract MONTH=2025-04
+```
+
+**Offline Mode Details:**
+- **Pre-download**: Use `make download` to interactively select and download PDFs from MinIO
+- **File layout**: Downloads to `data/pdf/<period>/<document>/` automatically
+- **No connectivity**: Pipeline runs without any MinIO or database connections
+- **Local processing**: All conversion, OCR, and extraction happen locally
+- **Source prompt**: You'll be asked for a source identifier for run metadata
+
+#### Native Python Development (No Docker)
+
+For pure local development without any services:
+
+```bash
+# One-time setup
+./setup_local_dev.sh
+source venv/bin/activate
+export $(cat .env.local | xargs)
+
+# Put PDFs under data/pdf/<period>/<document>/
+mkdir -p data/pdf/2025-04/document1
+# Copy your PDFs here
+
+# Run the full pipeline
+python run_local_pipeline.py --step all --engine tesseract
+
+# Or run individual steps
+python run_local_pipeline.py --step convert --input data/pdf/2025-04/document1
+python run_local_pipeline.py --step ocr --engine tesseract
+python run_local_pipeline.py --step extract --engine tesseract
+```
+
+**Benefits of native development:**
+- **Faster iteration**: No container startup time
+- **Direct debugging**: Use your IDE's debugger directly
+- **Minimal footprint**: No Docker overhead
+- **File-based**: Results saved as local JSON/text files
+
+#### MinIO → Offline Workflow
+
+To connect to MinIO, download PDFs, and then run fully offline:
+
+```bash
+# 1. Set up the local environment (one time)
+./setup_local_dev.sh
+source venv/bin/activate
+export $(cat .env.local | xargs)
+
+# 2. Set MinIO credentials in .env.prod:
+#    MINIO_ENDPOINT=your.server:9050
+#    MINIO_ACCESS_KEY=your_access_key
+#    MINIO_SECRET_KEY=your_secret_key
+
+# 3. Download PDFs from MinIO (interactive selection)
+PYTHONPATH=$(pwd) python scripts/data_prep/download_pdfs_from_minio.py
+
+# 4. Run the pipeline offline using the downloaded PDFs
+python run_local_pipeline.py --step all --engine tesseract
+```
+
+**This workflow:**
+1. **Connects to MinIO** using credentials from `.env.prod`
+2. **Interactive selection** of source → period → document folders
+3. **Downloads PDFs** into the `data/pdf/<period>/<document>/` layout
+4. **Processes locally**, with no Docker containers or database connections
+5. **Saves results** as JSON/text files under `results/`
+
+Great for: **grabbing the latest PDFs from cloud storage + fast local development**
+
+Outputs are saved under the `results/<engine-name>/` directory.
+
+---
+
+## 4 · Adding a New OCR Engine
+
+To add support for a new OCR engine, follow these three steps:
+
+1.  **Add a config**: Create a new config file for your engine under `configs/engines/`, e.g. `myengine.yaml`. The filename (without extension) becomes the engine's identifier.
+
+2.  **Implement the class**: Create a new Python file under `src/ocr_engines/`, e.g. `myengine_engine.py`. Implement your engine's class, which **must** inherit from `BaseOCREngine` and implement the `predict` method.
+
+    ```python
+    # src/ocr_engines/myengine_engine.py
+    from .base_engine import BaseOCREngine
+
+    class MyEngine(BaseOCREngine):
+        def __init__(self, config: dict):
+            super().__init__(config)
+            # Your engine's initialization logic here
+
+        def predict(self, image_path: str) -> dict:
+            # Your prediction logic here
+            return {"text": "extracted text", "confidence": 0.95, "engine": "MyEngine"}
+    ```
+
+3.  **Register the engine**: Add your new engine to `ENGINE_MAP` in `src/ocr_engines/utils.py`. This lets the pipeline find and load your class.
+
+    ```python
+    # src/ocr_engines/utils.py
+    from .easyocr_engine import EasyOCREngine
+    from .tesseract_engine import TesseractEngine
+    from .myengine_engine import MyEngine  # 1. Import your class
+
+    ENGINE_MAP = {
+        "tesseract": TesseractEngine,
+        "easyocr": EasyOCREngine,
+        "myengine": MyEngine,  # 2. Add it to the dict
+    }
+    ```
+
+After following these steps, you can run the pipeline with your new engine:
+
+```bash
+make run ENGINE=myengine
+```
+
+---
+
+## 5 · Developer Commands (`Makefile`)
+
+The `Makefile` provides convenient shortcuts for common tasks.
+
+| Command | Description |
+| :--- | :--- |
+| **Lifecycle** | |
+| `make docker-up` | Start all services defined in `docker-compose.yml`. |
+| `make docker-down` | Stop and remove all running containers. |
+| `make build` / `rebuild` | Build or rebuild the main `app` Docker image. |
+| `make app-sh` | Get an interactive `bash` shell inside the `app` container. |
+| **Code Quality** | |
+| `make dev-setup` | Auto-format (`black`) and lint (`ruff`) the code. |
+| `make format` | Run the code formatter. |
+| `make lint` | Run lint checks and static analysis. |
+| **Pipeline** | |
+| `make run ENGINE=... [OFFLINE=1]` | Run the whole OCR pipeline with a specific engine. |
+| `make download` | Interactively download PDFs from MinIO. |
+| `make convert SUBFOLDER=...` | Convert PDFs to images (manual step). |
+| `make ocr ENGINE=... MONTH=...` | Run only the OCR extraction step. |
+| `make extract ENGINE=... MONTH=...` | Clean raw OCR JSON output into tabular form. |
+| **Database** | |
+| `make pg-ddl` | Apply the initial SQL schema to the PostgreSQL database. |
+| `make pg-load RUN_ID=...` | Load CSVs into PostgreSQL for a specific run ID. |
+| `make insert` | Upsert OCR JSONs from the `results` directory into MongoDB. |
+
+For a full list of commands and their parameters, see the `Makefile`.
