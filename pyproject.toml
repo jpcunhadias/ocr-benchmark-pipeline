@@ -114,6 +114,11 @@ force-single-line = false
 combine-as-imports = true
 
 [tool.pytest.ini_options]
+# Without this, `import src.xxx` only resolves when pytest is invoked as
+# `python -m pytest` (which puts the CWD on sys.path) -- the bare `pytest`
+# binary (what `uv run pytest` calls) does not, and fails with
+# "ModuleNotFoundError: No module named 'src'".
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_functions = ["test_*"]
