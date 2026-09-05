@@ -1,5 +1,8 @@
+import io
+
 import pandas as pd
 import streamlit as st
+from PIL import Image, ImageDraw
 
 from utils import (
     accuracy_summary,
@@ -9,6 +12,8 @@ from utils import (
     list_extractions,
     list_page_metrics,
     localization_accuracy_breakdown,
+    localization_results,
+    page_image,
     sidebar_run_and_period,
     throughput_summary,
 )
@@ -264,6 +269,65 @@ if run_id:
         )
 else:
     st.info("Select a run in the sidebar to see its per-page accuracy.")
+
+st.divider()
+st.markdown("### Field Localization Preview")
+st.caption(
+    "Pick a page from the selected run to see the actual document with the "
+    "ground-truth (green) and predicted (blue if correct, red if not) field "
+    "boxes drawn on it. Rendered on demand from the source PDF in MinIO -- "
+    "the pipeline treats converted page images as disposable and doesn't "
+    "keep them around after a run."
+)
+
+if run_id and not df_metrics.empty:
+    page_options = df_metrics[["document", "page"]].drop_duplicates()
+    labels = [f"{row.document} — page {row.page}" for row in page_options.itertuples()]
+    picked = st.selectbox("Page", labels, key="localization_preview_page")
+
+    sel_idx = labels.index(picked)
+    sel_document = page_options.iloc[sel_idx]["document"]
+    sel_page = int(page_options.iloc[sel_idx]["page"])
+
+    image_bytes = page_image(run_id, sel_document, sel_page)
+    if image_bytes is None:
+        st.info(
+            "Page image not available -- either this run's source PDF is no "
+            "longer in object storage, or the run predates this feature."
+        )
+    else:
+        loc_rows_page = localization_results(run_id, sel_document, sel_page)
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        width, height = img.size
+
+        def _to_pixels(bbox: dict) -> tuple[float, float, float, float]:
+            return (
+                bbox["left"] * width,
+                bbox["top"] * height,
+                (bbox["left"] + bbox["width"]) * width,
+                (bbox["top"] + bbox["height"]) * height,
+            )
+
+        for field_row in loc_rows_page:
+            if field_row.get("gt_bbox"):
+                draw.rectangle(
+                    _to_pixels(field_row["gt_bbox"]), outline="lime", width=3
+                )
+            if field_row.get("predicted_bbox"):
+                color = "blue" if field_row.get("correct") else "red"
+                box = _to_pixels(field_row["predicted_bbox"])
+                draw.rectangle(box, outline=color, width=3)
+                draw.text(
+                    (box[0], max(box[1] - 16, 0)), field_row["field_name"], fill=color
+                )
+
+        st.image(img, use_container_width=True)
+        st.caption(
+            "🟩 ground truth · 🟦 predicted (correct) · 🟥 predicted (incorrect)"
+        )
+else:
+    st.info("Select a run with labeled pages to preview field localization.")
 
 with st.expander("ℹ️ About this project"):
     st.markdown(
