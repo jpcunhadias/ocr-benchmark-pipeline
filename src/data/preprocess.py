@@ -39,6 +39,10 @@ def preprocess_image(image_path: str) -> Image.Image:
         Image.Image: The preprocessed PIL image, ready for OCR.
     """
     img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError(
+            f"Could not read image (unsupported format or bad path): {image_path}"
+        )
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Denoise using median blur
