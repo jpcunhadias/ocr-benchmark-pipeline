@@ -8,6 +8,7 @@ from ..models import (
     AccuracySummary,
     CalibrationPoint,
     Extraction,
+    FieldAccuracyBreakdown,
     PageMetric,
     Run,
     ThroughputSummary,
@@ -101,7 +102,8 @@ async def get_page_metrics(
 ):
     async with AsyncSessionLocal() as session:
         query_str = """
-            SELECT run_id, timestamp, document, engine, page, elapsed_sec, avg_confidence, char_count, cer, wer
+            SELECT run_id, timestamp, document, engine, page, elapsed_sec, avg_confidence, char_count,
+                   cer, wer, fields_total, fields_correct, field_accuracy
             FROM ocr_page_metrics
             WHERE run_id = :run_id
         """
@@ -129,14 +131,16 @@ async def get_accuracy_summary(
         None, description="Restrict to runs from this period (YYYY-MM)."
     ),
 ):
-    """Mean CER/WER per engine, over pages with a ground-truth label under data/labels/."""
+    """Mean CER/WER/field-accuracy per engine, over pages with a ground-truth
+    label under data/labels/."""
     async with AsyncSessionLocal() as session:
         query_str = """
             SELECT m.engine,
                    COUNT(*) AS total_pages,
                    COUNT(m.cer) AS labeled_pages,
                    AVG(m.cer) AS avg_cer,
-                   AVG(m.wer) AS avg_wer
+                   AVG(m.wer) AS avg_wer,
+                   AVG(m.field_accuracy) AS avg_field_accuracy
             FROM ocr_page_metrics m
         """
         params = {}
@@ -231,3 +235,35 @@ async def get_calibration_points(
             )
             points.append(CalibrationPoint(**row_dict))
         return points
+
+
+@router.get("/field-accuracy", response_model=list[FieldAccuracyBreakdown])
+async def get_field_accuracy(
+    period: str | None = Query(
+        None, description="Restrict to runs from this period (YYYY-MM)."
+    ),
+):
+    """Per (engine, field_name) extraction accuracy -- which specific fields
+    each engine struggles with, across all labeled pages."""
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT f.engine,
+                   f.field_name,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN f.correct THEN 1 ELSE 0 END) AS correct,
+                   AVG(CASE WHEN f.correct THEN 1.0 ELSE 0.0 END) AS accuracy
+            FROM ocr_field_results f
+        """
+        params = {}
+
+        if period:
+            query_str += " JOIN runs r ON r.run_id = f.run_id WHERE r.period = :period"
+            params["period"] = period
+
+        query_str += " GROUP BY f.engine, f.field_name ORDER BY f.engine, accuracy ASC"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        return [FieldAccuracyBreakdown(**row) for row in rows]
