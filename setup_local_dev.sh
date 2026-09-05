@@ -14,6 +14,12 @@ fi
 echo "Syncing dependencies with uv..."
 uv sync
 
+# Wires pre-commit into .git/hooks/pre-commit -- a fresh clone doesn't run
+# hooks until someone installs them, and this script is the one place
+# every local setup path already goes through.
+echo "Installing pre-commit hooks..."
+uv run pre-commit install
+
 # Create local environment file
 if [ ! -f ".env.local" ]; then
     echo "Creating local environment file..."
