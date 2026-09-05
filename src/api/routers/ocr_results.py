@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -32,7 +34,7 @@ async def list_ocr_results(
     offset: int = Query(0, ge=0),
     db: AsyncIOMotorDatabase = Depends(get_mongo_db),
 ):
-    filters = []
+    filters: list[dict[str, Any]] = []
     if run_id:
         filters.append({"run_id": run_id})
     if engine:

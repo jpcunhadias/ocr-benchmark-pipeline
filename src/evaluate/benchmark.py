@@ -60,8 +60,12 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
             # itself is.
             ground_truth = load_ground_truth(image_path)
             has_ground_truth = ground_truth is not None
-            cer = char_error_rate(ground_truth, text) if has_ground_truth else None
-            wer = word_error_rate(ground_truth, text) if has_ground_truth else None
+            if ground_truth is not None:
+                cer = char_error_rate(ground_truth, text)
+                wer = word_error_rate(ground_truth, text)
+            else:
+                cer = None
+                wer = None
 
             results.append(
                 {

@@ -29,7 +29,7 @@ _FONT_CANDIDATES = {
 }
 
 
-def _load_font(kind: str, size: int) -> ImageFont.FreeTypeFont:
+def _load_font(kind: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in _FONT_CANDIDATES[kind]:
         if Path(path).exists():
             return ImageFont.truetype(path, size)
@@ -103,7 +103,8 @@ def build_report_page(
         "unloading and inventory intake."
     )
     words = notes.split()
-    line, cur_len = [], 0
+    line: list[str] = []
+    cur_len = 0
     max_chars = 62
     notes_lines = []
     for word in words:
