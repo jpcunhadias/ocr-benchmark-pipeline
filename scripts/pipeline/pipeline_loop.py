@@ -158,8 +158,7 @@ def main():
         periods = [p.name for p in LOCAL_PDF_DIR.iterdir() if p.is_dir()]
         if not periods:
             raise SystemExit(
-                f"No local periods found under {LOCAL_PDF_DIR}. "
-                "Download PDFs first."
+                f"No local periods found under {LOCAL_PDF_DIR}. " "Download PDFs first."
             )
 
         periods = sorted(periods)

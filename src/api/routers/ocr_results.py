@@ -19,9 +19,7 @@ async def list_ocr_results(
     run_id: str | None = Query(
         None, description="Filter by the run_id stored on the document."
     ),
-    doc_id: str | None = Query(
-        None, description="Filter by the deterministic doc_id."
-    ),
+    doc_id: str | None = Query(None, description="Filter by the deterministic doc_id."),
     document_name: str | None = Query(
         None, description="Filter by exact document name."
     ),

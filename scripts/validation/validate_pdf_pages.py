@@ -80,9 +80,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--img_dir", type=str, required=True, help="Directory with PNG images"
     )
-    parser.add_argument(
-        "--folder", type=str, required=True, help="Subfolder name"
-    )
+    parser.add_argument("--folder", type=str, required=True, help="Subfolder name")
 
     args = parser.parse_args()
     validate_folder(Path(args.img_dir), args.folder)

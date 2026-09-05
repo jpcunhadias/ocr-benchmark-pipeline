@@ -108,9 +108,7 @@ def main():
                 folders = [args.doc]
                 logger.info(f"Processing single document: {args.doc}")
             else:
-                raise ValueError(
-                    f"Document '{args.doc}' not found under {base_prefix}"
-                )
+                raise ValueError(f"Document '{args.doc}' not found under {base_prefix}")
 
         # Create run
         run_id = make_run_id(
