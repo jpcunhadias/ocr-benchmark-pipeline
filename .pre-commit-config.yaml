@@ -18,3 +18,15 @@ repos:
     rev: 24.8.0
     hooks:
       - id: black
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.1
+    hooks:
+      - id: mypy
+        # Whole-project run instead of per-changed-file: mypy needs full
+        # cross-module context, and the hook's isolated env needs pydantic
+        # installed for the pydantic.mypy plugin (configured in
+        # pyproject.toml) to load at all.
+        pass_filenames: false
+        args: [src, scripts, streamlit_app, tests, run_local_pipeline.py]
+        additional_dependencies: ["pydantic==2.9.0"]
