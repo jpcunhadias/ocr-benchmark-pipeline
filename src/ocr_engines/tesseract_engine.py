@@ -52,7 +52,8 @@ class TesseractEngine(BaseOCREngine):
         # Perform OCR
         text = pytesseract.image_to_string(img, lang=lang, config=tesseract_config)
 
-        # OCR - extract confidences (assume list of int)
+        # OCR - extract confidences (assume list of int) and per-word regions
+        regions: list[dict] = []
         try:
             data = pytesseract.image_to_data(
                 img, lang=lang, config=tesseract_config, output_type=Output.DICT
@@ -61,6 +62,29 @@ class TesseractEngine(BaseOCREngine):
                 conf for conf in data["conf"] if isinstance(conf, int) and conf >= 0
             ]
             avg_conf = sum(confidences) / len(confidences) if confidences else 0.0
+
+            # img is the preprocessed image actually handed to Tesseract --
+            # normalizing against its own size (not the source file's) keeps
+            # boxes correct even if preprocessing rotated/resized the page.
+            img_width, img_height = img.size
+            n_words = len(data["text"])
+            for i in range(n_words):
+                word_text = data["text"][i].strip()
+                conf = data["conf"][i]
+                if not word_text or not (isinstance(conf, int) and conf >= 0):
+                    continue
+                regions.append(
+                    {
+                        "text": word_text,
+                        "confidence": float(conf),
+                        "bbox": {
+                            "left": data["left"][i] / img_width,
+                            "top": data["top"][i] / img_height,
+                            "width": data["width"][i] / img_width,
+                            "height": data["height"][i] / img_height,
+                        },
+                    }
+                )
         except Exception as e:
             logger.warning(f"Confidence estimation failed: {e}")
             avg_conf = 0.0
@@ -69,4 +93,5 @@ class TesseractEngine(BaseOCREngine):
             "text": text.strip(),
             "confidence": avg_conf,
             "engine": "Tesseract",
+            "regions": regions,
         }
