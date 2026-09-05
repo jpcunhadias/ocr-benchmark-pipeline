@@ -28,5 +28,8 @@ jobs:
       - name: Format check (black)
         run: uv run black --check --diff . --exclude notebooks
 
+      - name: Type check (mypy)
+        run: uv run mypy src scripts streamlit_app tests run_local_pipeline.py
+
       - name: Run tests
         run: uv run pytest

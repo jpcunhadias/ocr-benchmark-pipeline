@@ -46,6 +46,7 @@ dev = [
     "ruff==0.6.3",
     "pytest==9.1.1",
     "pre-commit==4.6.2",
+    "mypy==2.3.1",
 ]
 
 [tool.uv]
@@ -54,6 +55,15 @@ dev = [
 # not a package under src/<name>/). Tell uv to manage the venv/lockfile
 # without trying to build and install the project itself as a wheel.
 package = false
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+# Most third-party deps here (pytesseract, easyocr, boto3, minio, ...) ship
+# no type stubs at all; requiring them would block adoption entirely rather
+# than catching real bugs in *our* code, which is the actual goal.
+ignore_missing_imports = true
+exclude = ["^\\.venv/"]
 
 [tool.black]
 line-length = 88
