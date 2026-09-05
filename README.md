@@ -83,7 +83,8 @@ This starts all services in the background. You can then access:
 For lightweight development focused on OCR processing, without any databases:
 
 ```bash
-# Set up the local environment (creates .venv/ via uv, writes .env.local)
+# Set up the local environment (creates .venv/ via uv, installs pre-commit
+# hooks, writes .env.local)
 ./setup_local_dev.sh
 
 # Load local env vars
@@ -95,6 +96,10 @@ uv run python run_local_pipeline.py --step all --engine tesseract
 
 `uv run` picks up `.venv/` automatically -- no activation needed. If you'd
 rather activate it directly, `source .venv/bin/activate` works too.
+
+`setup_local_dev.sh` also runs `pre-commit install`, so `ruff`/`black` (plus
+a few basic hygiene checks) run automatically on `git commit`. Run them on
+demand with `uv run pre-commit run --all-files`.
 
 **Local development features:**
 - **No Docker required**: Runs Python directly
