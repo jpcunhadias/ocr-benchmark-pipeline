@@ -81,6 +81,29 @@ def list_extractions(
     return api_get(f"/records/runs/{run_id}/extractions", params)
 
 
+@st.cache_data(ttl=60)
+def list_page_metrics(
+    run_id: str,
+    document: str | None = None,
+    only_labeled: bool = False,
+    limit: int = 1000,
+    offset: int = 0,
+):
+    params = {
+        "document": document,
+        "only_labeled": only_labeled,
+        "limit": limit,
+        "offset": offset,
+    }
+    return api_get(f"/records/runs/{run_id}/page-metrics", params)
+
+
+@st.cache_data(ttl=60)
+def accuracy_summary(period: str | None = None):
+    params = {"period": period} if period else None
+    return api_get("/records/accuracy-summary", params)
+
+
 def df_or_empty(rows) -> pd.DataFrame:
     return pd.DataFrame(rows) if isinstance(rows, list) and rows else pd.DataFrame()
 
