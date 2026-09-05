@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
+from src.ocr_engines.utils import normalize_confidence
+
 from ..db import AsyncSessionLocal
-from ..models import AccuracySummary, Extraction, PageMetric, Run
+from ..models import AccuracySummary, CalibrationPoint, Extraction, PageMetric, Run
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -143,3 +145,47 @@ async def get_accuracy_summary(
         rows = res.mappings().all()
 
         return [AccuracySummary(**row) for row in rows]
+
+
+@router.get("/calibration", response_model=list[CalibrationPoint])
+async def get_calibration_points(
+    period: str | None = Query(
+        None, description="Restrict to runs from this period (YYYY-MM)."
+    ),
+    engine: str | None = Query(None, description="Restrict to a single engine."),
+    limit: int = Query(2000, ge=1, le=10000),
+):
+    """Per-page (confidence, cer, wer) points for labeled pages, across all
+    runs -- the raw data behind a confidence-vs-accuracy calibration chart."""
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT m.run_id, m.document, m.page, m.engine, m.avg_confidence, m.cer, m.wer
+            FROM ocr_page_metrics m
+        """
+        wheres = ["m.cer IS NOT NULL"]
+        params = {"limit": limit}
+
+        if period:
+            query_str += " JOIN runs r ON r.run_id = m.run_id"
+            wheres.append("r.period = :period")
+            params["period"] = period
+
+        if engine:
+            wheres.append("m.engine = :engine")
+            params["engine"] = engine
+
+        query_str += " WHERE " + " AND ".join(wheres)
+        query_str += " ORDER BY m.avg_confidence LIMIT :limit"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        points = []
+        for row in rows:
+            row = dict(row)
+            row["confidence_normalized"] = normalize_confidence(
+                row["engine"], row["avg_confidence"]
+            )
+            points.append(CalibrationPoint(**row))
+        return points
