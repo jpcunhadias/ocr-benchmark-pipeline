@@ -86,13 +86,22 @@ def _empty_benchmark_result() -> BenchmarkResult:
 
 
 def _build_page_metrics_df(
-    results: list[dict], doc_name: str, engine_name: str
+    results: list[dict],
+    doc_name: str,
+    engine_name: str,
+    source_object: str | None = None,
 ) -> pd.DataFrame:
     """Build the ocr_page_metrics row for each page result from run_benchmark().
 
     Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer/fields_*/avg_iou/
     localization_fields_*) must match the dict shape produced by
     src.evaluate.benchmark.run_benchmark.
+
+    `source_object` is the exact MinIO object key this document's PDF came
+    from (None for offline runs, or when the caller doesn't know it) --
+    lets the box-overlay preview fetch a page's source PDF directly instead
+    of re-deriving the object key later via documents.source_path plus a
+    filename-stem search.
     """
     now = datetime.utcnow()
     rows = []
@@ -118,6 +127,7 @@ def _build_page_metrics_df(
                 "avg_iou": r.get("avg_iou"),
                 "localization_fields_total": r.get("localization_fields_total"),
                 "localization_fields_correct": r.get("localization_fields_correct"),
+                "source_object": source_object,
             }
         )
     return pd.DataFrame(rows)
@@ -199,10 +209,15 @@ def run_ocr_benchmark(
     output_path: Path,
     month: str | None = None,
     return_dataframes: bool = False,
+    source_objects: dict[str, str] | None = None,
 ):
     """
     Run OCR on grouped images and write one JSON per document into:
     results/<engine>/<month>/<CONTRACT>/<DOC>.json
+
+    `source_objects` maps a document's filename stem to the exact MinIO
+    object key its PDF came from (see scripts.pipeline.core.process_folder);
+    None/absent for offline runs.
     """
     if month is None:
         try:
@@ -251,7 +266,10 @@ def run_ocr_benchmark(
             )
 
             # Page metrics rows for this doc
-            page_rows.append(_build_page_metrics_df(results, doc_name, engine_name))
+            source_object = (source_objects or {}).get(doc_name)
+            page_rows.append(
+                _build_page_metrics_df(results, doc_name, engine_name, source_object)
+            )
             field_rows.append(_build_field_results_df(results, doc_name, engine_name))
             localization_rows.append(
                 _build_localization_results_df(results, doc_name, engine_name)
@@ -289,6 +307,7 @@ def run_ocr_benchmark_and_publish(
     month: str,
     run_id: str,
     document_name: str | None = None,
+    source_objects: dict[str, str] | None = None,
 ):
     # Run and get in-memory DFs (JSONs are also written by run_ocr_benchmark)
     result: BenchmarkResult = run_ocr_benchmark(
@@ -298,6 +317,7 @@ def run_ocr_benchmark_and_publish(
         output_path=output_path,
         month=month,
         return_dataframes=True,
+        source_objects=source_objects,
     )
     df_stats_doc = result.doc_stats
     df_page_metrics = result.page_metrics
