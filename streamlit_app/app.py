@@ -1,7 +1,9 @@
+import pandas as pd
 import streamlit as st
 
 from utils import (
     accuracy_summary,
+    calibration_points,
     df_or_empty,
     list_extractions,
     list_page_metrics,
@@ -106,6 +108,48 @@ else:
         if col in display_acc.columns:
             display_acc[col] = display_acc[col].astype(float).round(4)
     st.dataframe(display_acc, use_container_width=True)
+
+st.divider()
+st.markdown("### Confidence Calibration")
+st.caption(
+    "Does each engine's self-reported confidence actually track its accuracy? "
+    "Confidence is normalized to 0-1 (Tesseract reports 0-100 natively, EasyOCR "
+    "reports 0-1) so engines are comparable. A well-calibrated engine should show "
+    "higher confidence on lower-error pages."
+)
+
+cal_rows = calibration_points(period=period)
+df_cal = df_or_empty(cal_rows)
+chart_df = (
+    df_cal.dropna(subset=["confidence_normalized", "cer"])
+    if not df_cal.empty
+    else df_cal
+)
+if chart_df.empty:
+    st.info(
+        "No labeled pages with both confidence and accuracy data yet. Add "
+        "ground-truth labels under data/labels/ and re-run the pipeline."
+    )
+else:
+    st.scatter_chart(chart_df, x="confidence_normalized", y="cer", color="engine")
+
+    corr_rows = []
+    for eng, group in chart_df.groupby("engine"):
+        has_variance = group["confidence_normalized"].nunique() > 1
+        corr = (
+            group["confidence_normalized"].corr(group["cer"])
+            if len(group) >= 2 and has_variance
+            else None
+        )
+        corr_rows.append(
+            {"engine": eng, "pages": len(group), "confidence_vs_cer_corr": corr}
+        )
+    st.dataframe(pd.DataFrame(corr_rows), use_container_width=True)
+    st.caption(
+        "confidence_vs_cer_corr near -1 means higher confidence reliably predicts "
+        "lower error for that engine; near 0 means its confidence score isn't a "
+        "useful accuracy signal."
+    )
 
 st.divider()
 st.markdown("### Extracted Text (selected run)")

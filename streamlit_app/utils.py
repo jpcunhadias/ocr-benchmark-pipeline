@@ -104,6 +104,12 @@ def accuracy_summary(period: str | None = None):
     return api_get("/records/accuracy-summary", params)
 
 
+@st.cache_data(ttl=60)
+def calibration_points(period: str | None = None, engine: str | None = None):
+    params = {"period": period, "engine": engine}
+    return api_get("/records/calibration", params)
+
+
 def df_or_empty(rows) -> pd.DataFrame:
     return pd.DataFrame(rows) if isinstance(rows, list) and rows else pd.DataFrame()
 
