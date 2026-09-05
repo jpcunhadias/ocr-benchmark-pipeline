@@ -1,5 +1,6 @@
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,7 @@ def build_extractions_df(
             doc = json.load(f)
 
         pages = doc.get("pages", {})
+        page_iter: Iterable[tuple[Any, Any]]
         if isinstance(pages, dict):
             items = sorted(pages.items(), key=lambda kv: _normalize_page_no(kv[0]))
             page_iter = ((_normalize_page_no(k), v) for k, v in items)

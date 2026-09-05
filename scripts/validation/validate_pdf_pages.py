@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 VALIDATION_REPORT_PATH = Path("results/validation_report.csv")
 
 
-def validate_folder(img_dir: Path, folder_name: str, month: str = None) -> None:
+def validate_folder(img_dir: Path, folder_name: str, month: str | None = None) -> None:
     results = []
     image_files = sorted(img_dir.rglob("*.png"))
 

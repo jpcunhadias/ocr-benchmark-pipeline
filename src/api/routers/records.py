@@ -205,7 +205,7 @@ async def get_calibration_points(
             FROM ocr_page_metrics m
         """
         wheres = ["m.cer IS NOT NULL"]
-        params = {"limit": limit}
+        params: dict[str, str | int] = {"limit": limit}
 
         if period:
             query_str += " JOIN runs r ON r.run_id = m.run_id"
@@ -225,9 +225,9 @@ async def get_calibration_points(
 
         points = []
         for row in rows:
-            row = dict(row)
-            row["confidence_normalized"] = normalize_confidence(
-                row["engine"], row["avg_confidence"]
+            row_dict = dict(row)
+            row_dict["confidence_normalized"] = normalize_confidence(
+                row_dict["engine"], row_dict["avg_confidence"]
             )
-            points.append(CalibrationPoint(**row))
+            points.append(CalibrationPoint(**row_dict))
         return points

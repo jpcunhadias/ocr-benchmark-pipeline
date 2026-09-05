@@ -25,7 +25,7 @@ _PAGE_RE = re.compile(r"(?:_page_)?_(\d+)$")
 
 
 def get_image_paths_by_document(
-    data_dir: str, extensions: list[str] = None
+    data_dir: str, extensions: list[str] | None = None
 ) -> dict[str, list[str]]:
     """Group images by document prefix, removing suffixes like '_001' or '_page_001'."""
     if extensions is None:
@@ -181,6 +181,7 @@ def run_ocr_benchmark_and_publish(
     )
 
     # Handle both return types: tuple (with dataframes) or None
+    doc_contents: list[dict]
     if result is None:
         df_stats_doc, df_page_metrics, doc_contents = pd.DataFrame(), pd.DataFrame(), []
     elif isinstance(result, tuple) and len(result) == 3:

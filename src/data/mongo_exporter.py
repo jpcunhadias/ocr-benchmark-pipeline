@@ -20,7 +20,7 @@ RUN_ID = os.getenv("RUN_ID") or uuid.uuid4().hex
 def get_mongo_client(uri: str | None = None) -> MongoClient:
     uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
     try:
-        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+        client: MongoClient = MongoClient(uri, serverSelectionTimeoutMS=5000)
         client.admin.command("ping")
         return client
     except errors.PyMongoError as e:
@@ -198,35 +198,39 @@ def _same_index(
 
 
 def ensure_indexes(coll: Collection) -> None:
+    index_name = "uniq_docname_month"
+    index_key: list[tuple[str, int]] = [("document_name", 1), ("month", 1)]
+    index_unique = True
+    index_partial_filter = {
+        "document_name": {"$type": "string"},
+        "month": {"$type": "string"},
+    }
     desired = {
-        "name": "uniq_docname_month",
-        "key": [("document_name", 1), ("month", 1)],
-        "unique": True,
-        "partialFilterExpression": {
-            "document_name": {"$type": "string"},
-            "month": {"$type": "string"},
-        },
+        "name": index_name,
+        "key": index_key,
+        "unique": index_unique,
+        "partialFilterExpression": index_partial_filter,
     }
 
     # Check existing indexes by name
     existing_by_name = {ix["name"]: ix for ix in coll.list_indexes()}
-    if desired["name"] in existing_by_name:
-        ix = existing_by_name[desired["name"]]
+    if index_name in existing_by_name:
+        ix = existing_by_name[index_name]
         if not _same_index(ix, desired):
-            logger.info(f"Rebuilding index {desired['name']} to match desired spec")
-            coll.drop_index(desired["name"])
+            logger.info(f"Rebuilding index {index_name} to match desired spec")
+            coll.drop_index(index_name)
             coll.create_index(
-                desired["key"],
-                unique=desired["unique"],
-                name=desired["name"],
-                partialFilterExpression=desired["partialFilterExpression"],
+                index_key,
+                unique=index_unique,
+                name=index_name,
+                partialFilterExpression=index_partial_filter,
             )
     else:
         coll.create_index(
-            desired["key"],
-            unique=desired["unique"],
-            name=desired["name"],
-            partialFilterExpression=desired["partialFilterExpression"],
+            index_key,
+            unique=index_unique,
+            name=index_name,
+            partialFilterExpression=index_partial_filter,
         )
 
     # Secondary indexes (idempotent; keep simple)

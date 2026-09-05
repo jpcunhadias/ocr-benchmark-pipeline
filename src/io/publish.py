@@ -130,7 +130,7 @@ def _get_mongo_client() -> MongoClient:
     logger.info("Connecting to MongoDB at %s...", mongo_uri)
 
     try:
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        client: MongoClient = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         # The ismaster command is cheap and does not require auth.
         client.admin.command("ismaster")
         logger.info("✓ MongoDB connection successful.")
