@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS documents (
   inserted_at     TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_documents_month_source ON documents(month, source);
+CREATE INDEX IF NOT EXISTS idx_documents_run_id ON documents(run_id);
 
 -- Per-document OCR runtime stats
 CREATE TABLE IF NOT EXISTS ocr_document_stats (
