@@ -1,0 +1,13 @@
+ACME LOGISTICS
+Delivery Inspection Report
+Report ID: RPT-1000
+Date: 2025-04-14
+Route: Warehouse 4 -> Distribution Center B
+Inspector: J. Alvarez
+Status: PASSED
+Notes:
+All packages were inspected on arrival and no damage was
+found. Seals matched the manifest and temperature logs were
+within the expected range for the full duration of transport.
+Cleared for unloading and inventory intake.
+Page 1

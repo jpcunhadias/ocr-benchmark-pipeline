@@ -203,8 +203,10 @@ data/**
 !data/**/
 !data/**/.gitkeep
 
-# Except the synthetic sample PDF used to run the pipeline out of the box
+# Except the synthetic sample PDF used to run the pipeline out of the box,
+# and its ground-truth labels (used for CER/WER accuracy benchmarking)
 !data/pdf/2025-04/sample-report/**
+!data/labels/sample_delivery_report/**
 
 results/**
 !results/**/
