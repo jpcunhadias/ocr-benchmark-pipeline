@@ -5,6 +5,7 @@ from utils import (
     accuracy_summary,
     calibration_points,
     df_or_empty,
+    field_accuracy_breakdown,
     list_extractions,
     list_page_metrics,
     sidebar_run_and_period,
@@ -111,6 +112,26 @@ else:
     st.dataframe(display_acc, use_container_width=True)
 
 st.divider()
+st.markdown("### Field Extraction Accuracy")
+st.caption(
+    "Did each engine get the actual field *values* right (Report ID, Date, "
+    "Route, Inspector, Status), not just the raw characters? Broken down "
+    "per field so it's clear which specific fields each engine struggles with."
+)
+
+field_rows = field_accuracy_breakdown(period=period)
+df_field = df_or_empty(field_rows)
+if df_field.empty:
+    st.info(
+        "No field-accuracy data yet. Add ground-truth labels under "
+        "data/labels/<document>/<document>_<page>.fields.json and re-run the pipeline."
+    )
+else:
+    pivot = df_field.pivot(index="field_name", columns="engine", values="accuracy")
+    st.bar_chart(pivot)
+    st.dataframe(df_field, use_container_width=True)
+
+st.divider()
 st.markdown("### Confidence Calibration")
 st.caption(
     "Does each engine's self-reported confidence actually track its accuracy? "
@@ -202,7 +223,9 @@ if run_id:
         st.info("No labeled pages for this run.")
     else:
         st.dataframe(
-            df_metrics[["document", "page", "cer", "wer", "avg_confidence"]],
+            df_metrics[
+                ["document", "page", "cer", "wer", "field_accuracy", "avg_confidence"]
+            ],
             use_container_width=True,
         )
 else:
