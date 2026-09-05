@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
 from ..db import AsyncSessionLocal
-from ..models import Extraction, Run
+from ..models import AccuracySummary, Extraction, PageMetric, Run
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -77,3 +77,69 @@ async def get_extractions(
         rows = res.mappings().all()
 
         return [Extraction(**row) for row in rows]
+
+
+@router.get("/runs/{run_id}/page-metrics", response_model=list[PageMetric])
+async def get_page_metrics(
+    run_id: str,
+    document: str | None = None,
+    only_labeled: bool = Query(
+        False,
+        description="Only return pages with ground-truth accuracy (cer IS NOT NULL).",
+    ),
+    limit: int = Query(1000, ge=1, le=10000),
+    offset: int = Query(0, ge=0),
+):
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT run_id, timestamp, document, engine, page, elapsed_sec, avg_confidence, char_count, cer, wer
+            FROM ocr_page_metrics
+            WHERE run_id = :run_id
+        """
+        params = {"run_id": run_id, "limit": limit, "offset": offset}
+
+        if document:
+            query_str += " AND document = :document"
+            params["document"] = document
+
+        if only_labeled:
+            query_str += " AND cer IS NOT NULL"
+
+        query_str += " ORDER BY document, page LIMIT :limit OFFSET :offset"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        return [PageMetric(**row) for row in rows]
+
+
+@router.get("/accuracy-summary", response_model=list[AccuracySummary])
+async def get_accuracy_summary(
+    period: str | None = Query(
+        None, description="Restrict to runs from this period (YYYY-MM)."
+    ),
+):
+    """Mean CER/WER per engine, over pages with a ground-truth label under data/labels/."""
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT m.engine,
+                   COUNT(*) AS total_pages,
+                   COUNT(m.cer) AS labeled_pages,
+                   AVG(m.cer) AS avg_cer,
+                   AVG(m.wer) AS avg_wer
+            FROM ocr_page_metrics m
+        """
+        params = {}
+
+        if period:
+            query_str += " JOIN runs r ON r.run_id = m.run_id WHERE r.period = :period"
+            params["period"] = period
+
+        query_str += " GROUP BY m.engine ORDER BY avg_cer ASC NULLS LAST"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        return [AccuracySummary(**row) for row in rows]

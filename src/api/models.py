@@ -28,3 +28,24 @@ class Extraction(BaseModel):
     char_count: int | None = None
     period: str | None = None
     doc_id: str | None = None
+
+
+class PageMetric(BaseModel):
+    run_id: str
+    timestamp: datetime | None = None
+    document: str
+    engine: str | None = None
+    page: int | None = None
+    elapsed_sec: float | None = None
+    avg_confidence: float | None = None
+    char_count: int | None = None
+    cer: float | None = None
+    wer: float | None = None
+
+
+class AccuracySummary(BaseModel):
+    engine: str | None = None
+    total_pages: int
+    labeled_pages: int
+    avg_cer: float | None = None
+    avg_wer: float | None = None
