@@ -2,6 +2,7 @@
 name = "ocr-benchmark-pipeline"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
+license = { file = "LICENSE" }
 dependencies = [
     # --- OCR engines ---
     "pytesseract==0.3.13",
