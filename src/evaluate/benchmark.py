@@ -6,6 +6,11 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from src.evaluate.field_extraction import (
+    extract_fields,
+    field_accuracy,
+    load_field_ground_truth,
+)
 from src.evaluate.metrics import char_error_rate, load_ground_truth, word_error_rate
 from src.ocr_engines.base_engine import BaseOCREngine
 from src.utils.logger import get_logger
@@ -67,6 +72,22 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
                 cer = None
                 wer = None
 
+            # Field-extraction accuracy, when field ground truth exists for
+            # this page. Computed on the same raw OCR text as CER/WER.
+            field_ground_truth = load_field_ground_truth(image_path)
+            if field_ground_truth is not None:
+                extracted_fields = extract_fields(text, list(field_ground_truth.keys()))
+                facc = field_accuracy(field_ground_truth, extracted_fields)
+                fields_total = facc["fields_total"]
+                fields_correct = facc["fields_correct"]
+                field_acc = facc["field_accuracy"]
+                field_details = facc["per_field"]
+            else:
+                fields_total = None
+                fields_correct = None
+                field_acc = None
+                field_details = None
+
             results.append(
                 {
                     "timestamp": pd.Timestamp.now("UTC"),
@@ -79,6 +100,10 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
                     "has_ground_truth": has_ground_truth,
                     "cer": cer,
                     "wer": wer,
+                    "fields_total": fields_total,
+                    "fields_correct": fields_correct,
+                    "field_accuracy": field_acc,
+                    "field_details": field_details,
                     # keep raw hooks if you want later:
                     "image_path": image_path,
                     "raw_text": text,
