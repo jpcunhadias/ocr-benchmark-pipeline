@@ -3,6 +3,7 @@ import numpy as np
 
 from src.data.preprocess import preprocess_image
 from src.ocr_engines.base_engine import BaseOCREngine
+from src.ocr_engines.utils import group_regions_into_lines
 
 
 class EasyOCREngine(BaseOCREngine):
@@ -34,10 +35,7 @@ class EasyOCREngine(BaseOCREngine):
 
         results = self.reader.readtext(img_np)
 
-        texts = [text for _, text, _ in results]
         confidences = [conf for *_, conf in results if isinstance(conf, float | int)]
-
-        extracted_text = " ".join(texts).strip()
         avg_conf = (
             round(sum(confidences) / len(confidences), 4) if confidences else None
         )
@@ -66,6 +64,16 @@ class EasyOCREngine(BaseOCREngine):
                     },
                 }
             )
+
+        # readtext() returns detections in no particular line order, so
+        # reconstruct reading-order lines from the boxes before joining --
+        # a flat " ".join(texts) would otherwise collapse the whole page
+        # into a single line, breaking anything (e.g. field_extraction's
+        # per-line label lookup) that relies on line structure.
+        lines = group_regions_into_lines(regions)
+        extracted_text = "\n".join(
+            " ".join(region["text"] for region in line) for line in lines
+        ).strip()
 
         return {
             "text": extracted_text,
