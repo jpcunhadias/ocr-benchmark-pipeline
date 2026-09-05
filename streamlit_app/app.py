@@ -8,6 +8,7 @@ from utils import (
     field_accuracy_breakdown,
     list_extractions,
     list_page_metrics,
+    localization_accuracy_breakdown,
     sidebar_run_and_period,
     throughput_summary,
 )
@@ -106,7 +107,7 @@ if df_acc.empty:
     )
 else:
     display_acc = df_acc.copy()
-    for col in ("avg_cer", "avg_wer"):
+    for col in ("avg_cer", "avg_wer", "avg_iou"):
         if col in display_acc.columns:
             display_acc[col] = display_acc[col].astype(float).round(4)
     st.dataframe(display_acc, use_container_width=True)
@@ -130,6 +131,31 @@ else:
     pivot = df_field.pivot(index="field_name", columns="engine", values="accuracy")
     st.bar_chart(pivot)
     st.dataframe(df_field, use_container_width=True)
+
+st.divider()
+st.markdown("### Localization Accuracy")
+st.caption(
+    "Beyond reading the right value, did each engine also find WHERE it is "
+    "on the page? Measured as IoU (intersection-over-union) between the "
+    "engine's detected region and the ground-truth box for each field, "
+    "'correct' meaning IoU >= 0.5 -- the same style of metric real "
+    "document-AI benchmarks (FUNSD, CORD, DocVQA) use."
+)
+
+loc_rows = localization_accuracy_breakdown(period=period)
+df_loc = df_or_empty(loc_rows)
+if df_loc.empty:
+    st.info(
+        "No localization data yet. Add box ground truth under "
+        "data/labels/<document>/<document>_<page>.boxes.json and re-run the pipeline."
+    )
+else:
+    loc_pivot = df_loc.pivot(index="field_name", columns="engine", values="avg_iou")
+    st.bar_chart(loc_pivot)
+    display_loc = df_loc.copy()
+    if "avg_iou" in display_loc.columns:
+        display_loc["avg_iou"] = display_loc["avg_iou"].astype(float).round(4)
+    st.dataframe(display_loc, use_container_width=True)
 
 st.divider()
 st.markdown("### Confidence Calibration")
@@ -224,7 +250,15 @@ if run_id:
     else:
         st.dataframe(
             df_metrics[
-                ["document", "page", "cer", "wer", "field_accuracy", "avg_confidence"]
+                [
+                    "document",
+                    "page",
+                    "cer",
+                    "wer",
+                    "field_accuracy",
+                    "avg_iou",
+                    "avg_confidence",
+                ]
             ],
             use_container_width=True,
         )
