@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS ocr_page_metrics (
   avg_iou         NUMERIC,  -- mean IoU across labeled fields; NULL when unlabeled
   localization_fields_total    INT,  -- number of box-labeled fields for this page; NULL when unlabeled
   localization_fields_correct  INT,  -- number of those fields located with IoU >= threshold; NULL when unlabeled
+  source_object   TEXT,     -- exact MinIO object key this page's PDF came from; NULL for offline runs or rows predating this column
   PRIMARY KEY (run_id, document, page)
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_page_metrics_engine ON ocr_page_metrics(engine);
