@@ -1,0 +1,9 @@
+# PaddleOCR engine configuration
+
+# PaddleOCR loads one language-specific model (unlike EasyOCR's
+# multi-language lang_list) -- default matches the shipped sample doc.
+lang: en
+
+# Run on CPU (matches easyocr.yaml's gpu:false default -- no GPU assumed
+# for this project).
+device: cpu

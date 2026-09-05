@@ -15,11 +15,18 @@ def _load_easyocr_engine():
     return EasyOCREngine
 
 
+def _load_paddleocr_engine():
+    from src.ocr_engines.paddleocr_engine import PaddleOCREngine
+
+    return PaddleOCREngine
+
+
 # Values are loaders rather than classes so that an engine's (potentially
 # heavy) dependencies are only imported when that engine is actually used.
 ENGINE_LOADERS = {
     "tesseract": _load_tesseract_engine,
     "easyocr": _load_easyocr_engine,
+    "paddleocr": _load_paddleocr_engine,
 }
 
 
