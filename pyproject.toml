@@ -46,6 +46,12 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["N802", "N803", "N806"]  # Allow uppercase in test functions
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's DI pattern calls Depends()/Query() in argument defaults by
+# design; B008 doesn't know that convention and would otherwise flag every
+# route handler.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["src", "scripts"]
 force-single-line = false
