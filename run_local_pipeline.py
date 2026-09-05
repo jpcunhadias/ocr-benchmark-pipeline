@@ -35,31 +35,41 @@ def convert_pdfs(input_dir: str, output_dir: str, dpi: int = 300):
 
 
 def run_ocr(config_path: str, data_dir: str, output_dir: str):
-    """Run OCR on processed images."""
+    """Run OCR on processed images.
+
+    Uses the same run_benchmark() as the Docker/Postgres pipeline, so local
+    runs get identical timing, confidence, and CER/WER-against-data/labels/
+    accuracy -- instead of a separate, thinner code path with none of that.
+    """
     print(f"Running OCR with config {config_path}")
 
+    from src.evaluate.benchmark import run_benchmark
     from src.ocr_engines.utils import load_engine
+    from src.utils.stats import json_default
 
     engine = load_engine(config_path)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    image_files = list(Path(data_dir).rglob("*.png"))
+    image_files = [str(p) for p in Path(data_dir).rglob("*.png")]
     print(f"Found {len(image_files)} images to process")
 
-    results = []
-    for img_path in image_files:
-        try:
-            result = engine.predict(str(img_path))
-            results.append({"image_path": str(img_path), "ocr_result": result})
-            print(f"Processed: {img_path.name}")
-        except Exception as e:
-            print(f"Error processing {img_path}: {e}")
+    results = run_benchmark(image_files, engine)
 
     results_file = Path(output_dir) / "ocr_results.json"
     with open(results_file, "w") as f:
-        json.dump(results, f, indent=2)
+        json.dump(results, f, indent=2, default=json_default)
 
     print(f"OCR completed. Results saved to {results_file}")
+
+    labeled = [r for r in results if r.get("has_ground_truth")]
+    if labeled:
+        avg_cer = sum(r["cer"] for r in labeled) / len(labeled)
+        avg_wer = sum(r["wer"] for r in labeled) / len(labeled)
+        print(
+            f"  {len(labeled)}/{len(results)} pages had ground truth under "
+            f"data/labels/ -- avg CER {avg_cer:.3f}, avg WER {avg_wer:.3f}"
+        )
+
     return results
 
 
@@ -81,7 +91,7 @@ def extract_fields(results_dir: str, engine: str):
     extracted_file = Path(results_dir) / "extracted_text.txt"
     with open(extracted_file, "w") as f:
         for result in results:
-            raw_text = (result.get("ocr_result") or {}).get("text", "")
+            raw_text = result.get("raw_text", "")
             f.write(f"=== {result['image_path']} ===\n")
             f.write(f"{preprocess_ocr_text(raw_text)}\n\n")
 
