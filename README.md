@@ -162,6 +162,14 @@ make run
 make run ENGINE=paddleocr
 ```
 
+> **Known limitation — PaddleOCR inside Docker on Apple Silicon:** `make run ENGINE=paddleocr`
+> segfaults in the `app` container on Apple Silicon hosts. This is an unresolved upstream bug in
+> PaddlePaddle's Linux `aarch64` wheel (`paddle::AnalysisPredictor::SaveOrLoadPirParameters`,
+> tracked in [PaddlePaddle/Paddle#76111](https://github.com/PaddlePaddle/Paddle/issues/76111)),
+> reproduced across every model variant and the newest available aarch64 build — not something
+> fixable from this repo. PaddleOCR's macOS wheel is unaffected: it runs cleanly (CER/WER 0.0 on
+> the sample doc) via the [native/no-Docker path](#native-python-development-no-docker) below.
+
 **Offline Mode**
 ```bash
 # First, download PDFs from MinIO to local storage
