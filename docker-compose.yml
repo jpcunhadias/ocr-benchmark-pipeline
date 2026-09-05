@@ -114,6 +114,11 @@ services:
     build: .
     command: streamlit run streamlit_app/app.py --server.port=8501 --server.address=0.0.0.0
     ports: ["8501:8501"]
+    volumes:
+      # The Run Pipeline page runs the offline pipeline (no MinIO/Postgres)
+      # in-process; it needs the repo mounted so uploaded PDFs and results
+      # persist and are visible outside the container, same as `app`.
+      - ./:/app
     environment:
       OCR_API_URL: "http://api:8080"   # use the **service name** on the Docker network
       OCR_API_KEY: "dev-secret"
