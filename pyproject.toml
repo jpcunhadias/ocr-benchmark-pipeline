@@ -8,8 +8,13 @@ dependencies = [
     "easyocr==1.7.1",
     "paddleocr==3.7.0",
     # Pinned below latest (3.3.0+) -- those dropped the manylinux2014_aarch64
-    # wheel, which this project's own Docker image (linux/arm64 on Apple
-    # Silicon) needs. 3.2.2 is the last release that still ships it.
+    # wheel from PyPI, which this project's own Docker image (linux/arm64 on
+    # Apple Silicon) needs. 3.2.2 is the last release PyPI still ships it for.
+    # Note: bumping this won't fix PaddleOCR inside that container anyway --
+    # every aarch64 build (confirmed through 3.3.1, pulled from paddlepaddle's
+    # own index) segfaults on model load, an unresolved upstream bug tracked
+    # in PaddlePaddle/Paddle#76111. Unaffected on macOS (different wheel) --
+    # see the README's "Known limitation" note under ENGINE=paddleocr.
     "paddlepaddle==3.2.2",
     # --- Evaluation ---
     "jiwer==4.0.0",
