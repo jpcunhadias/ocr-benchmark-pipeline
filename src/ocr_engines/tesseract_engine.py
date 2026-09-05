@@ -1,4 +1,3 @@
-
 import pytesseract
 from pytesseract import Output
 
