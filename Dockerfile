@@ -5,10 +5,14 @@ FROM python:${PYTHON_VERSION}-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
     PYTHONPATH=/app \
-    VIRTUAL_ENV=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH=/opt/venv/bin:$PATH
+
+# uv binary itself, straight from astral's own image -- no curl/pip needed
+COPY --from=ghcr.io/astral-sh/uv:0.12.10 /uv /uvx /bin/
 
 # System deps
 # - libgl* for OpenCV
@@ -21,30 +25,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tesseract-ocr tesseract-ocr-eng tesseract-ocr-por \
     && rm -rf /var/lib/apt/lists/*
 
-# Create virtualenv
-RUN python -m venv /opt/venv
-
 # Non-root user
 RUN useradd -m -u 1000 appuser && mkdir -p /app && chown -R appuser:appuser /app
 WORKDIR /app
 
-# ---------- Build wheels in a separate stage ----------
+# ---------- Install dependencies (cached separately from app code) ----------
 FROM base AS deps
-USER root
-# pip cache for faster builds
-RUN --mount=type=cache,target=/root/.cache/pip true
-COPY requirements.txt /app/requirements.txt
-# Build wheels (root is fine)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip wheel && \
-    pip wheel --wheel-dir=/wheels -r /app/requirements.txt
+# Only the dependency manifests -- editing application code shouldn't bust
+# this layer's cache, only editing pyproject.toml/uv.lock should. This is an
+# app, not a publishable package ([tool.uv] package = false in
+# pyproject.toml), so uv doesn't need the actual source tree to resolve and
+# install dependencies here.
+#
+# Includes the dev group (ruff/black/pytest/mypy/pre-commit): `app`'s
+# make lint/format/dev-setup targets shell into this same image and expect
+# them present, matching the old requirements.txt which bundled them into
+# every service too.
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked
 
 # ---------- Runtime image ----------
 FROM base AS runtime
-USER root
-COPY --from=deps /wheels /wheels
-# Install from wheels into venv, then delete wheels (as root so no perms issue)
-RUN pip install --no-index --find-links=/wheels /wheels/* && rm -rf /wheels
+COPY --from=deps /opt/venv /opt/venv
 
 # Copy your source (compose will also mount it during dev)
 COPY . /app
