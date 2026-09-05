@@ -48,8 +48,13 @@ CONFIDENCE_SCALE_MAX = {
 
 
 def normalize_confidence(engine_name: str, confidence: float | None) -> float | None:
-    """Scale a raw engine confidence value onto a common 0-1 range."""
+    """Scale a raw engine confidence value onto a common 0-1 range.
+
+    `confidence` may arrive as a Decimal (Postgres NUMERIC rows come back
+    that way via asyncpg/SQLAlchemy) rather than a float, and Python won't
+    divide a Decimal by a float directly -- coerce it first.
+    """
     if confidence is None:
         return None
     scale = CONFIDENCE_SCALE_MAX.get(engine_name, 1.0)
-    return confidence / scale
+    return float(confidence) / scale
