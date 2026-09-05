@@ -11,6 +11,11 @@ from src.evaluate.field_extraction import (
     field_accuracy,
     load_field_ground_truth,
 )
+from src.evaluate.localization import (
+    load_field_boxes_ground_truth,
+    localization_accuracy,
+    locate_fields,
+)
 from src.evaluate.metrics import char_error_rate, load_ground_truth, word_error_rate
 from src.ocr_engines.base_engine import BaseOCREngine
 from src.utils.logger import get_logger
@@ -88,6 +93,30 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
                 field_acc = None
                 field_details = None
 
+            # Localization accuracy, when box ground truth exists for this
+            # page. Uses the engine's own detected regions (bounding boxes),
+            # independent of field_ground_truth above -- the two sidecars
+            # are loaded separately and may not always agree on which
+            # fields they cover.
+            field_boxes_ground_truth = load_field_boxes_ground_truth(image_path)
+            if field_boxes_ground_truth is not None:
+                regions = ocr_result.get("regions") or []
+                predicted_boxes = locate_fields(
+                    regions, list(field_boxes_ground_truth.keys())
+                )
+                lacc = localization_accuracy(field_boxes_ground_truth, predicted_boxes)
+                fields_located = lacc["fields_located"]
+                localization_fields_total = lacc["fields_total"]
+                localization_fields_correct = lacc["fields_correct"]
+                avg_iou = lacc["avg_iou"]
+                localization_details = lacc["per_field"]
+            else:
+                fields_located = None
+                localization_fields_total = None
+                localization_fields_correct = None
+                avg_iou = None
+                localization_details = None
+
             results.append(
                 {
                     "timestamp": pd.Timestamp.now("UTC"),
@@ -104,6 +133,11 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
                     "fields_correct": fields_correct,
                     "field_accuracy": field_acc,
                     "field_details": field_details,
+                    "fields_located": fields_located,
+                    "localization_fields_total": localization_fields_total,
+                    "localization_fields_correct": localization_fields_correct,
+                    "avg_iou": avg_iou,
+                    "localization_details": localization_details,
                     # keep raw hooks if you want later:
                     "image_path": image_path,
                     "raw_text": text,
