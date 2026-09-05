@@ -4,7 +4,14 @@ from sqlalchemy import text
 from src.ocr_engines.utils import normalize_confidence
 
 from ..db import AsyncSessionLocal
-from ..models import AccuracySummary, CalibrationPoint, Extraction, PageMetric, Run
+from ..models import (
+    AccuracySummary,
+    CalibrationPoint,
+    Extraction,
+    PageMetric,
+    Run,
+    ThroughputSummary,
+)
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -145,6 +152,41 @@ async def get_accuracy_summary(
         rows = res.mappings().all()
 
         return [AccuracySummary(**row) for row in rows]
+
+
+@router.get("/throughput-summary", response_model=list[ThroughputSummary])
+async def get_throughput_summary(
+    period: str | None = Query(
+        None, description="Restrict to runs from this period (YYYY-MM)."
+    ),
+):
+    """Pages/sec and per-page latency (avg/median/p95) per engine."""
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT m.engine,
+                   COUNT(*) AS total_pages,
+                   AVG(m.elapsed_sec) AS avg_sec_per_page,
+                   PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY m.elapsed_sec) AS median_sec_per_page,
+                   PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY m.elapsed_sec) AS p95_sec_per_page,
+                   CASE WHEN SUM(m.elapsed_sec) > 0
+                        THEN COUNT(*) / SUM(m.elapsed_sec)
+                        ELSE NULL
+                   END AS pages_per_sec
+            FROM ocr_page_metrics m
+        """
+        params = {}
+
+        if period:
+            query_str += " JOIN runs r ON r.run_id = m.run_id WHERE r.period = :period"
+            params["period"] = period
+
+        query_str += " GROUP BY m.engine ORDER BY pages_per_sec DESC NULLS LAST"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        return [ThroughputSummary(**row) for row in rows]
 
 
 @router.get("/calibration", response_model=list[CalibrationPoint])

@@ -110,6 +110,12 @@ def calibration_points(period: str | None = None, engine: str | None = None):
     return api_get("/records/calibration", params)
 
 
+@st.cache_data(ttl=60)
+def throughput_summary(period: str | None = None):
+    params = {"period": period} if period else None
+    return api_get("/records/throughput-summary", params)
+
+
 def df_or_empty(rows) -> pd.DataFrame:
     return pd.DataFrame(rows) if isinstance(rows, list) and rows else pd.DataFrame()
 

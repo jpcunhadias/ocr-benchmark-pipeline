@@ -51,6 +51,15 @@ class AccuracySummary(BaseModel):
     avg_wer: float | None = None
 
 
+class ThroughputSummary(BaseModel):
+    engine: str | None = None
+    total_pages: int
+    avg_sec_per_page: float | None = None
+    median_sec_per_page: float | None = None
+    p95_sec_per_page: float | None = None
+    pages_per_sec: float | None = None
+
+
 class CalibrationPoint(BaseModel):
     run_id: str
     document: str
