@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS ocr_document_stats CASCADE;
 DROP TABLE IF EXISTS ocr_page_metrics CASCADE;
 DROP TABLE IF EXISTS ocr_field_results CASCADE;
+DROP TABLE IF EXISTS ocr_localization_results CASCADE;
 DROP TABLE IF EXISTS extractions CASCADE;
 DROP TABLE IF EXISTS runs CASCADE;
 
@@ -72,6 +73,9 @@ CREATE TABLE IF NOT EXISTS ocr_page_metrics (
   fields_total    INT,      -- number of labeled fields for this page; NULL when unlabeled
   fields_correct  INT,      -- number of those fields extracted correctly; NULL when unlabeled
   field_accuracy  NUMERIC,  -- fields_correct / fields_total; NULL when unlabeled
+  avg_iou         NUMERIC,  -- mean IoU across labeled fields; NULL when unlabeled
+  localization_fields_total    INT,  -- number of box-labeled fields for this page; NULL when unlabeled
+  localization_fields_correct  INT,  -- number of those fields located with IoU >= threshold; NULL when unlabeled
   PRIMARY KEY (run_id, document, page)
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_page_metrics_engine ON ocr_page_metrics(engine);
@@ -89,6 +93,22 @@ CREATE TABLE IF NOT EXISTS ocr_field_results (
   PRIMARY KEY (run_id, document, page, field_name)
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_field_results_engine_field ON ocr_field_results(engine, field_name);
+
+-- Per-field localization results (IoU-based: did the engine find WHERE each field is)
+CREATE TABLE IF NOT EXISTS ocr_localization_results (
+  run_id          TEXT,
+  document        TEXT NOT NULL,
+  engine          TEXT,
+  page            INT,
+  field_name      TEXT NOT NULL,
+  iou             NUMERIC,
+  located         BOOLEAN,
+  correct         BOOLEAN,
+  gt_bbox         JSONB,
+  predicted_bbox  JSONB,
+  PRIMARY KEY (run_id, document, page, field_name)
+);
+CREATE INDEX IF NOT EXISTS idx_ocr_localization_results_engine_field ON ocr_localization_results(engine, field_name);
 
 -- Cleaned OCR text extracted per page
 CREATE TABLE IF NOT EXISTS extractions (
