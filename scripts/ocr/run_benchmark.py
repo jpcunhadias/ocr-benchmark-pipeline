@@ -64,23 +64,29 @@ def extract_page_number(path: str) -> int:
 def _build_page_metrics_df(
     results: list[dict], doc_name: str, engine_name: str
 ) -> pd.DataFrame:
+    """Build the ocr_page_metrics row for each page result from run_benchmark().
+
+    Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer) must match the
+    dict shape produced by src.evaluate.benchmark.run_benchmark.
+    """
     now = datetime.utcnow()
     rows = []
     for r in results:
-        text = (r.get("text") or "").strip()
         rows.append(
             {
                 "timestamp": now,  # TIMESTAMPTZ
                 "document": doc_name,  # TEXT
                 "engine": engine_name,  # TEXT
                 "page": extract_page_number(r["image_path"]),  # INT
-                "elapsed_sec": round(float(r.get("inference_time") or 0.0), 2),
+                "elapsed_sec": round(float(r.get("elapsed_sec") or 0.0), 2),
                 "avg_confidence": (
-                    round(float(r["confidence"]), 2)
-                    if r.get("confidence") is not None
+                    round(float(r["avg_confidence"]), 2)
+                    if r.get("avg_confidence") is not None
                     else None
                 ),
-                "char_count": len(text),
+                "char_count": r.get("n_chars", 0),
+                "cer": r.get("cer"),
+                "wer": r.get("wer"),
             }
         )
     return pd.DataFrame(rows)
