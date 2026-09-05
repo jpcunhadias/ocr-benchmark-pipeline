@@ -49,3 +49,14 @@ class AccuracySummary(BaseModel):
     labeled_pages: int
     avg_cer: float | None = None
     avg_wer: float | None = None
+
+
+class CalibrationPoint(BaseModel):
+    run_id: str
+    document: str
+    page: int | None = None
+    engine: str | None = None
+    avg_confidence: float | None = None
+    confidence_normalized: float | None = None
+    cer: float | None = None
+    wer: float | None = None
