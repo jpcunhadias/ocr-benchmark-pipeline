@@ -8,6 +8,7 @@ from utils import (
     list_extractions,
     list_page_metrics,
     sidebar_run_and_period,
+    throughput_summary,
 )
 
 st.set_page_config(page_title="OCR Benchmark Dashboard", layout="wide")
@@ -150,6 +151,30 @@ else:
         "lower error for that engine; near 0 means its confidence score isn't a "
         "useful accuracy signal."
     )
+
+st.divider()
+st.markdown("### Throughput")
+st.caption(
+    "Pages processed per second by engine, across all runs for the selected "
+    "period. Median/p95 show per-page latency spread, not just the average."
+)
+
+tp_rows = throughput_summary(period=period)
+df_tp = df_or_empty(tp_rows)
+if df_tp.empty:
+    st.info("No timing data yet. Run the OCR pipeline to populate this.")
+else:
+    display_tp = df_tp.copy()
+    for col in (
+        "avg_sec_per_page",
+        "median_sec_per_page",
+        "p95_sec_per_page",
+        "pages_per_sec",
+    ):
+        if col in display_tp.columns:
+            display_tp[col] = display_tp[col].astype(float).round(3)
+    st.bar_chart(display_tp.set_index("engine")["pages_per_sec"])
+    st.dataframe(display_tp, use_container_width=True)
 
 st.divider()
 st.markdown("### Extracted Text (selected run)")
