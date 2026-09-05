@@ -6,6 +6,11 @@ dependencies = [
     # --- OCR engines ---
     "pytesseract==0.3.13",
     "easyocr==1.7.1",
+    "paddleocr==3.7.0",
+    # Pinned below latest (3.3.0+) -- those dropped the manylinux2014_aarch64
+    # wheel, which this project's own Docker image (linux/arm64 on Apple
+    # Silicon) needs. 3.2.2 is the last release that still ships it.
+    "paddlepaddle==3.2.2",
     # --- Evaluation ---
     "jiwer==4.0.0",
     # --- Utilities / imaging ---
