@@ -18,9 +18,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.10 /uv /uvx /bin/
 # - libgl* for OpenCV
 # - poppler-utils for pdf2image (uses pdftoppm)
 # - tesseract-ocr (+ languages) for pytesseract/easyocr runtime
+# - libgomp1 for paddlepaddle's CPU inference runtime (OpenMP) -- not
+#   present in python:slim by default, and paddlepaddle fails to import
+#   without it
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates tzdata \
-      libglib2.0-0 libgl1 libsm6 libxext6 libxrender1 \
+      libglib2.0-0 libgl1 libsm6 libxext6 libxrender1 libgomp1 \
       poppler-utils \
       tesseract-ocr tesseract-ocr-eng tesseract-ocr-por \
     && rm -rf /var/lib/apt/lists/*
