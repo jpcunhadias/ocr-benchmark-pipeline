@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check . --exclude .venv,notebooks
+
+      - name: Format check (black)
+        run: black --check --diff . --exclude notebooks
+
+      - name: Run tests
+        # Bare `pytest` doesn't put the repo root on sys.path, so `import src`
+        # fails; `python -m pytest` does (matches how tests are run locally
+        # via `make`, which sets PYTHONPATH explicitly for the same reason).
+        run: python -m pytest
