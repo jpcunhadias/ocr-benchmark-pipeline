@@ -1,6 +1,12 @@
 import streamlit as st
 
-from utils import df_or_empty, list_extractions, sidebar_run_and_period
+from utils import (
+    accuracy_summary,
+    df_or_empty,
+    list_extractions,
+    list_page_metrics,
+    sidebar_run_and_period,
+)
 
 st.set_page_config(page_title="OCR Benchmark Dashboard", layout="wide")
 
@@ -53,7 +59,9 @@ try:
                 "Failed",
                 failed_runs,
                 delta=(
-                    None if failed_runs == 0 else f"{100 * failed_runs / total_runs:.1f}%"
+                    None
+                    if failed_runs == 0
+                    else f"{100 * failed_runs / total_runs:.1f}%"
                 ),
                 delta_color="inverse",
             )
@@ -79,6 +87,27 @@ except Exception as e:
     st.warning(f"Could not load run data: {e}")
 
 st.divider()
+st.markdown("### Accuracy by Engine")
+st.caption(
+    "Mean CER/WER against ground-truth labels under data/labels/, across all runs "
+    "for the selected period. Only pages with a matching label file count."
+)
+
+acc_rows = accuracy_summary(period=period)
+df_acc = df_or_empty(acc_rows)
+if df_acc.empty:
+    st.info(
+        "No accuracy data yet. Add ground-truth labels under "
+        "data/labels/<document>/<document>_<page>.txt and re-run the pipeline."
+    )
+else:
+    display_acc = df_acc.copy()
+    for col in ("avg_cer", "avg_wer"):
+        if col in display_acc.columns:
+            display_acc[col] = display_acc[col].astype(float).round(4)
+    st.dataframe(display_acc, use_container_width=True)
+
+st.divider()
 st.markdown("### Extracted Text (selected run)")
 
 if run_id:
@@ -94,6 +123,22 @@ if run_id:
 else:
     st.info("Select a run in the sidebar to browse its extracted text.")
 
+st.divider()
+st.markdown("### Page Accuracy (selected run)")
+
+if run_id:
+    metric_rows = list_page_metrics(run_id, only_labeled=True)
+    df_metrics = df_or_empty(metric_rows)
+    if df_metrics.empty:
+        st.info("No labeled pages for this run.")
+    else:
+        st.dataframe(
+            df_metrics[["document", "page", "cer", "wer", "avg_confidence"]],
+            use_container_width=True,
+        )
+else:
+    st.info("Select a run in the sidebar to see its per-page accuracy.")
+
 with st.expander("ℹ️ About this project"):
     st.markdown(
         """
@@ -106,7 +151,8 @@ with st.expander("ℹ️ About this project"):
        selected engine
     2. **Text cleanup**: normalizes OCR noise into cleaned text per page
     3. **Metrics**: tracks confidence, elapsed time, and character counts per
-       engine/run
+       engine/run, plus CER/WER accuracy against ground-truth labels where
+       available
     4. **Dashboard**: this app, for browsing runs and extracted text
     """
     )
