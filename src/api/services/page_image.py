@@ -6,6 +6,14 @@ run. The durable artifact is the source PDF in MinIO (downloading doesn't
 delete it), so a specific page is re-rendered from that PDF on demand
 instead of trying to retain/persist the PNG.
 
+Two ways to resolve (run_id, document) to a MinIO object:
+- Fast path: ocr_page_metrics.source_object, the exact object key recorded
+  at pipeline-write time (see scripts.pipeline.core.process_folder).
+- Fallback: for runs that predate that column, list objects under the
+  prefixes registered on `documents` for this run_id and match by filename
+  stem -- correct (the PNG-naming and doc-grouping conventions are exact
+  inverses) but does a live MinIO listing instead of one direct lookup.
+
 Raises MinioConnectionError for a genuine backend failure (unreachable
 MinIO, auth failure, ...) so callers can distinguish that from an honest
 "no matching PDF found" (returned as None) -- conflating the two would
@@ -53,6 +61,23 @@ def _connect_to_minio() -> Minio:
     )
 
 
+async def _fetch_direct_source_object(run_id: str, document: str) -> str | None:
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(
+            text(
+                """
+                SELECT source_object FROM ocr_page_metrics
+                WHERE run_id = :run_id AND document = :document
+                  AND source_object IS NOT NULL
+                LIMIT 1
+                """
+            ),
+            {"run_id": run_id, "document": document},
+        )
+        row = res.first()
+        return row[0] if row else None
+
+
 async def _fetch_candidate_source_paths(run_id: str) -> list[str]:
     async with AsyncSessionLocal() as session:
         res = await session.execute(
@@ -77,20 +102,10 @@ def _find_source_object(
     return None
 
 
-def _render_page_sync(
-    document: str, page: int, source_paths: list[str]
+def _fetch_and_render(
+    client: Minio, bucket: str, object_name: str, page: int
 ) -> bytes | None:
-    bucket = os.getenv("MINIO_BUCKET", "ocr-artifacts")
-    client = _connect_to_minio()
-
-    try:
-        object_name = _find_source_object(client, bucket, source_paths, document)
-    except _MINIO_BACKEND_ERRORS as err:
-        raise MinioConnectionError(str(err)) from err
-
-    if object_name is None:
-        return None
-
+    """Download one object's bytes and rasterize a single page from it."""
     try:
         response = client.get_object(bucket, object_name)
         try:
@@ -112,10 +127,39 @@ def _render_page_sync(
     return buf.getvalue()
 
 
+def _render_direct_sync(object_name: str, page: int) -> bytes | None:
+    bucket = os.getenv("MINIO_BUCKET", "ocr-artifacts")
+    client = _connect_to_minio()
+    return _fetch_and_render(client, bucket, object_name, page)
+
+
+def _render_page_sync(
+    document: str, page: int, source_paths: list[str]
+) -> bytes | None:
+    bucket = os.getenv("MINIO_BUCKET", "ocr-artifacts")
+    client = _connect_to_minio()
+
+    try:
+        object_name = _find_source_object(client, bucket, source_paths, document)
+    except _MINIO_BACKEND_ERRORS as err:
+        raise MinioConnectionError(str(err)) from err
+
+    if object_name is None:
+        return None
+
+    return _fetch_and_render(client, bucket, object_name, page)
+
+
 async def render_page_image(run_id: str, document: str, page: int) -> bytes | None:
-    """Render `page` of `document`'s source PDF (from the MinIO prefixes
-    registered for `run_id`) as PNG bytes, or None if no matching PDF is
-    found. Raises MinioConnectionError on a real backend failure."""
+    """Render `page` of `document`'s source PDF as PNG bytes, or None if no
+    matching PDF is found. Raises MinioConnectionError on a real backend
+    failure. Prefers the object key recorded at write time
+    (ocr_page_metrics.source_object); falls back to a live MinIO listing +
+    filename-stem match for runs that predate that column."""
+    object_name = await _fetch_direct_source_object(run_id, document)
+    if object_name is not None:
+        return await run_in_threadpool(_render_direct_sync, object_name, page)
+
     source_paths = await _fetch_candidate_source_paths(run_id)
     if not source_paths:
         return None

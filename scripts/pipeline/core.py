@@ -14,7 +14,7 @@ from scripts.data_prep.convert_pdfs_to_images import batch_convert_pdfs
 from scripts.ocr.extract_from_json import run_extraction_stage
 from scripts.ocr.run_benchmark import run_ocr_benchmark_and_publish
 from scripts.validation.validate_pdf_pages import validate_folder
-from src.data.minio_client import download_files
+from src.data.minio_client import download_files, list_files
 from src.io.publish import register_document
 from src.ocr_engines.utils import load_engine
 from src.utils.create_ids import make_doc_id
@@ -119,6 +119,7 @@ def process_folder(
     local_img_root.mkdir(parents=True, exist_ok=True)
 
     # Download PDFs
+    source_objects: dict[str, str] = {}
     if pipeline_use_minio():
         if minio_client is None:
             raise RuntimeError(
@@ -126,6 +127,17 @@ def process_folder(
             )
         logger.info(f"Downloading PDFs from {prefix_on_minio}")
         download_files(minio_client, BUCKET_NAME, prefix_on_minio, local_pdf_root)
+
+        # Record exactly which MinIO object each PDF came from, keyed by
+        # filename stem (== the `document` value run_benchmark() later
+        # produces) -- lets the dashboard's box-overlay preview fetch a
+        # page's source PDF directly by object key instead of re-deriving
+        # it later via documents.source_path + a filename-stem search.
+        source_objects = {
+            Path(name).stem: name
+            for name in list_files(minio_client, BUCKET_NAME, prefix_on_minio)
+            if name.lower().endswith(".pdf")
+        }
     else:
         logger.info(
             "MinIO download disabled; using existing PDFs at %s", local_pdf_root
@@ -168,6 +180,7 @@ def process_folder(
         month=month,
         run_id=run_id,
         document_name=folder,
+        source_objects=source_objects,
     )
 
     # Clean and store extracted text

@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image
@@ -7,6 +8,7 @@ from src.api.services.page_image import (
     MinioConnectionError,
     _find_source_object,
     _render_page_sync,
+    render_page_image,
 )
 
 
@@ -155,3 +157,72 @@ def test_render_page_sync_wraps_connection_errors(mock_find, mock_connect):
 
     with pytest.raises(MinioConnectionError):
         _render_page_sync("sample_delivery_report", 1, ["acme/2025-04/sample-report/"])
+
+
+@patch(
+    "src.api.services.page_image._fetch_direct_source_object", new_callable=AsyncMock
+)
+@patch("src.api.services.page_image._render_direct_sync")
+def test_render_page_image_prefers_direct_source_object(
+    mock_render_direct, mock_fetch_direct
+):
+    """When ocr_page_metrics.source_object is set (pipeline recorded it at
+    write time), render_page_image must use it directly and never touch
+    documents/MinIO listing at all."""
+    mock_fetch_direct.return_value = (
+        "acme/2025-04/sample-report/sample_delivery_report.pdf"
+    )
+    mock_render_direct.return_value = b"fake-png-bytes"
+
+    with patch(
+        "src.api.services.page_image._fetch_candidate_source_paths",
+        new_callable=AsyncMock,
+    ) as mock_fallback:
+        result = asyncio.run(render_page_image("run-1", "sample_delivery_report", 1))
+
+        assert result == b"fake-png-bytes"
+        mock_render_direct.assert_called_once_with(
+            "acme/2025-04/sample-report/sample_delivery_report.pdf", 1
+        )
+        mock_fallback.assert_not_called()
+
+
+@patch(
+    "src.api.services.page_image._fetch_direct_source_object", new_callable=AsyncMock
+)
+@patch(
+    "src.api.services.page_image._fetch_candidate_source_paths", new_callable=AsyncMock
+)
+@patch("src.api.services.page_image._render_page_sync")
+def test_render_page_image_falls_back_when_no_source_object(
+    mock_render_fallback, mock_fetch_candidates, mock_fetch_direct
+):
+    """Runs that predate the source_object column must still work, via the
+    original prefix + filename-stem search."""
+    mock_fetch_direct.return_value = None
+    mock_fetch_candidates.return_value = ["acme/2025-04/sample-report/"]
+    mock_render_fallback.return_value = b"fake-png-bytes"
+
+    result = asyncio.run(render_page_image("run-1", "sample_delivery_report", 1))
+
+    assert result == b"fake-png-bytes"
+    mock_render_fallback.assert_called_once_with(
+        "sample_delivery_report", 1, ["acme/2025-04/sample-report/"]
+    )
+
+
+@patch(
+    "src.api.services.page_image._fetch_direct_source_object", new_callable=AsyncMock
+)
+@patch(
+    "src.api.services.page_image._fetch_candidate_source_paths", new_callable=AsyncMock
+)
+def test_render_page_image_returns_none_with_no_candidates(
+    mock_fetch_candidates, mock_fetch_direct
+):
+    mock_fetch_direct.return_value = None
+    mock_fetch_candidates.return_value = []
+
+    result = asyncio.run(render_page_image("run-1", "sample_delivery_report", 1))
+
+    assert result is None
