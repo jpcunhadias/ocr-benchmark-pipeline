@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
+from src.evaluate.metrics import char_error_rate, load_ground_truth, word_error_rate
 from src.ocr_engines.base_engine import BaseOCREngine
 from src.utils.logger import get_logger
 
@@ -53,6 +54,15 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
 
             doc, page_no = parse_doc_and_page(image_path)
 
+            # Accuracy against ground truth, when a label file exists for this
+            # page. Computed on raw OCR text -- text cleanup happens later, in
+            # the extraction stage, and would muddy how accurate the engine
+            # itself is.
+            ground_truth = load_ground_truth(image_path)
+            has_ground_truth = ground_truth is not None
+            cer = char_error_rate(ground_truth, text) if has_ground_truth else None
+            wer = word_error_rate(ground_truth, text) if has_ground_truth else None
+
             results.append(
                 {
                     "timestamp": pd.Timestamp.now("UTC"),
@@ -62,6 +72,9 @@ def run_benchmark(image_paths: list[str], ocr_engine: BaseOCREngine) -> list[dic
                     "elapsed_sec": round(elapsed_time, 2),
                     "avg_confidence": None if avg_conf is None else float(avg_conf),
                     "n_chars": len(text.strip()),
+                    "has_ground_truth": has_ground_truth,
+                    "cer": cer,
+                    "wer": wer,
                     # keep raw hooks if you want later:
                     "image_path": image_path,
                     "raw_text": text,
