@@ -2,6 +2,9 @@
 pytesseract==0.3.13
 easyocr==1.7.1
 
+# --- Evaluation ---
+jiwer==4.0.0
+
 # --- Utilities / imaging ---
 opencv-python==4.10.0.84
 Pillow==10.4.0
