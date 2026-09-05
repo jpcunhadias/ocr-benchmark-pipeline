@@ -3,19 +3,16 @@
 
 echo "Setting up local OCR pipeline development environment..."
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "Creating Python virtual environment..."
-    python -m venv venv
+if ! command -v uv >/dev/null 2>&1; then
+    echo "uv is required -- install it from https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 fi
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source venv/bin/activate
-
-# Install dependencies
-echo "Installing dependencies..."
-pip install -r requirements.txt
+# Creates .venv/ and installs runtime + dev dependencies from uv.lock
+# (pyproject.toml + uv.lock are the source of truth; requirements.txt is
+# generated from them for the Dockerfile's benefit -- see README).
+echo "Syncing dependencies with uv..."
+uv sync
 
 # Create local environment file
 if [ ! -f ".env.local" ]; then
@@ -39,16 +36,16 @@ fi
 echo "Local development environment ready!"
 echo ""
 echo "To use:"
-echo "1. source venv/bin/activate"
-echo "2. export \$(cat .env.local | xargs)"
-echo "3. Run individual scripts directly with python"
+echo "1. export \$(cat .env.local | xargs)"
+echo "2. Run scripts via 'uv run python ...' (no activation needed), or"
+echo "   'source .venv/bin/activate' if you'd rather activate the venv directly"
 echo ""
 echo "Example workflow:"
 echo "# Step 1: Convert PDFs to images"
-echo "python scripts/data_prep/convert_pdfs_to_images.py --input_dir data/pdf/2025-04/document1 --output_dir data/processed --dpi 300"
+echo "uv run python scripts/data_prep/convert_pdfs_to_images.py --input_dir data/pdf/2025-04/document1 --output_dir data/processed --dpi 300"
 echo ""
 echo "# Step 2: Run OCR"
-echo "python scripts/ocr/run_benchmark.py --config configs/engines/tesseract.yaml --data_dir data/processed --output_dir results/tesseract"
+echo "uv run python scripts/ocr/run_benchmark.py --config configs/engines/tesseract.yaml --data_dir data/processed --output_dir results/tesseract"
 echo ""
 echo "# Step 3: Extract fields"
-echo "python scripts/ocr/extract_from_json.py --engine tesseract --month 2025-04 --results_dir results"
+echo "uv run python scripts/ocr/extract_from_json.py --engine tesseract --month 2025-04 --results_dir results"
