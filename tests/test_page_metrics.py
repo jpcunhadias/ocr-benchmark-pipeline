@@ -1,6 +1,11 @@
+import numpy as np
 import pytest
 
-from scripts.ocr.run_benchmark import _build_field_results_df, _build_page_metrics_df
+from scripts.ocr.run_benchmark import (
+    _build_field_results_df,
+    _build_localization_results_df,
+    _build_page_metrics_df,
+)
 
 
 def _page_result(**overrides) -> dict:
@@ -93,3 +98,103 @@ def test_build_field_results_df_skips_unlabeled_pages():
     )
 
     assert df.empty
+
+
+def _localization_result(**overrides) -> dict:
+    base = {
+        "image_path": "data/processed/doc1/doc1_001.png",
+        "localization_details": {
+            "Report ID:": {
+                "iou": 1.0,
+                "located": True,
+                "correct": True,
+                "gt_bbox": {"left": 0.2, "top": 0.1, "width": 0.08, "height": 0.02},
+                "predicted_bbox": {
+                    "left": 0.2,
+                    "top": 0.1,
+                    "width": 0.08,
+                    "height": 0.02,
+                },
+            },
+            "Status:": {
+                "iou": 0.1,
+                "located": True,
+                "correct": False,
+                "gt_bbox": {"left": 0.3, "top": 0.2, "width": 0.05, "height": 0.02},
+                "predicted_bbox": {
+                    "left": 0.31,
+                    "top": 0.25,
+                    "width": 0.05,
+                    "height": 0.02,
+                },
+            },
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_build_localization_results_df_explodes_per_field_rows():
+    df = _build_localization_results_df(
+        [_localization_result()], doc_name="doc1", engine_name="tesseract"
+    )
+
+    assert len(df) == 2
+    row = df[df["field_name"] == "Status:"].iloc[0]
+    assert row["document"] == "doc1"
+    assert row["engine"] == "tesseract"
+    assert row["page"] == 1
+    assert row["iou"] == pytest.approx(0.1)
+    assert bool(row["located"]) is True
+    assert bool(row["correct"]) is False
+    assert row["gt_bbox"] == pytest.approx(
+        {"left": 0.3, "top": 0.2, "width": 0.05, "height": 0.02}
+    )
+
+
+def test_build_localization_results_df_skips_unlabeled_pages():
+    df = _build_localization_results_df(
+        [_localization_result(localization_details=None)],
+        doc_name="doc1",
+        engine_name="tesseract",
+    )
+
+    assert df.empty
+
+
+def test_build_localization_results_df_casts_numpy_bbox_values_to_native_float():
+    """EasyOCR's regions carry numpy scalars upstream. gt_bbox/predicted_bbox
+    are JSONB columns -- json.dumps() (used by psycopg2's JSONB adapter)
+    can't serialize numpy floats, so the DataFrame builder must cast them to
+    native float or the insert breaks at write time. (Plain NUMERIC columns
+    like `iou` don't have this problem -- pandas/psycopg2 already handle
+    numpy scalars fine there, same as the pre-existing cer/wer columns.)"""
+    result = _localization_result(
+        localization_details={
+            "Report ID:": {
+                "iou": np.float32(0.87),
+                "located": True,
+                "correct": True,
+                "gt_bbox": {
+                    "left": np.float32(0.2),
+                    "top": np.float32(0.1),
+                    "width": np.float32(0.08),
+                    "height": np.float32(0.02),
+                },
+                "predicted_bbox": {
+                    "left": np.float32(0.2),
+                    "top": np.float32(0.1),
+                    "width": np.float32(0.08),
+                    "height": np.float32(0.02),
+                },
+            }
+        }
+    )
+
+    df = _build_localization_results_df(
+        [result], doc_name="doc1", engine_name="easyocr"
+    )
+    row = df.iloc[0]
+
+    assert all(type(v) is float for v in row["gt_bbox"].values())
+    assert all(type(v) is float for v in row["predicted_bbox"].values())
