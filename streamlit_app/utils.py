@@ -144,11 +144,12 @@ def page_image(run_id: str, document: str, page: int) -> bytes | None:
     neither of which fits a binary response where "not found" is routine."""
     url = f"{API_URL.rstrip('/')}/records/runs/{run_id}/page-image"
     headers = {"X-API-Key": API_KEY}
+    params: dict[str, str | int] = {"document": document, "page": page}
     try:
         r = requests.get(
             url,
             headers=headers,
-            params={"document": document, "page": page},
+            params=params,
             timeout=30,
         )
         if r.status_code == 404:
