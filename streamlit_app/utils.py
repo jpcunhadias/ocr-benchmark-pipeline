@@ -128,6 +128,38 @@ def localization_accuracy_breakdown(period: str | None = None):
     return api_get("/records/localization-accuracy", params)
 
 
+@st.cache_data(ttl=60)
+def localization_results(run_id: str, document: str, page: int):
+    params = {"document": document, "page": page}
+    return api_get(f"/records/runs/{run_id}/localization-results", params)
+
+
+@st.cache_data(ttl=None)
+def page_image(run_id: str, document: str, page: int) -> bytes | None:
+    """Fetch the rendered page image. Unlike the other cached fetchers
+    (ttl=60, tuned for metrics that could still change), (run_id, document,
+    page) permanently determines this output once a run is finished, so no
+    TTL is needed. A dedicated fetcher, not api_get() -- that helper
+    unconditionally calls .json() and routes failures through st.error,
+    neither of which fits a binary response where "not found" is routine."""
+    url = f"{API_URL.rstrip('/')}/records/runs/{run_id}/page-image"
+    headers = {"X-API-Key": API_KEY}
+    try:
+        r = requests.get(
+            url,
+            headers=headers,
+            params={"document": document, "page": page},
+            timeout=30,
+        )
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.content
+    except requests.RequestException as e:
+        st.error(f"API error fetching page image: {e}")
+        return None
+
+
 def df_or_empty(rows) -> pd.DataFrame:
     return pd.DataFrame(rows) if isinstance(rows, list) and rows else pd.DataFrame()
 
