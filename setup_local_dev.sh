@@ -9,8 +9,8 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # Creates .venv/ and installs runtime + dev dependencies from uv.lock
-# (pyproject.toml + uv.lock are the source of truth; requirements.txt is
-# generated from them for the Dockerfile's benefit -- see README).
+# (pyproject.toml + uv.lock are the source of truth; the Dockerfile also
+# runs `uv sync` directly, so there's nothing else to keep in step).
 echo "Syncing dependencies with uv..."
 uv sync
 
