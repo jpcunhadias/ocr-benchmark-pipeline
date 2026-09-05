@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -53,12 +54,13 @@ def _draw_lines(
 
 def build_report_page(
     title_font, label_font, body_font, report_id: str, page_no: int
-) -> tuple[Image.Image, list[str]]:
-    """Draw one report page and return (image, ground_truth_lines).
+) -> tuple[Image.Image, list[str], list[tuple[str, str]]]:
+    """Draw one report page and return (image, ground_truth_lines, fields).
 
-    ``ground_truth_lines`` holds the same text in reading order, built from
-    the exact strings drawn onto the page so the label can never drift from
-    what the image actually shows.
+    ``ground_truth_lines`` holds the same text in reading order, and
+    ``fields`` the (label, value) pairs, both built from the exact strings
+    drawn onto the page so neither can drift from what the image actually
+    shows.
     """
     img = _blank_page()
     draw = ImageDraw.Draw(img)
@@ -133,7 +135,7 @@ def build_report_page(
     ground_truth_lines = (
         header_lines + field_lines + ["Notes:"] + notes_lines + [footer]
     )
-    return img, ground_truth_lines
+    return img, ground_truth_lines, fields
 
 
 def write_ground_truth(
@@ -146,6 +148,23 @@ def write_ground_truth(
     for idx, lines in enumerate(page_lines, start=1):
         label_path = doc_dir / f"{pdf_path.stem}_{idx:03}.txt"
         label_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_field_ground_truth(
+    pdf_path: Path,
+    page_fields: list[list[tuple[str, str]]],
+    labels_root: Path = Path("data/labels"),
+) -> None:
+    """Write one <doc>_<page>.fields.json per page: {label: value}, built
+    from the same (label, value) pairs drawn onto the page -- the structured
+    counterpart to write_ground_truth's flat-text labels."""
+    doc_dir = labels_root / pdf_path.stem
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    for idx, fields in enumerate(page_fields, start=1):
+        label_path = doc_dir / f"{pdf_path.stem}_{idx:03}.fields.json"
+        label_path.write_text(
+            json.dumps(dict(fields), indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def generate_sample_pdf(output_path: Path, num_pages: int = 2) -> None:
@@ -163,8 +182,9 @@ def generate_sample_pdf(output_path: Path, num_pages: int = 2) -> None:
         )
         for i in range(num_pages)
     ]
-    pages = [img for img, _ in built]
-    page_lines = [lines for _, lines in built]
+    pages = [img for img, _, _ in built]
+    page_lines = [lines for _, lines, _ in built]
+    page_fields = [fields for _, _, fields in built]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # PAGE_SIZE is 1700x2200px, sized for a 200 DPI US Letter page (8.5x11in).
@@ -172,6 +192,7 @@ def generate_sample_pdf(output_path: Path, num_pages: int = 2) -> None:
     # to ~23x30in, which then gets upscaled/blurred badly when re-rasterized.
     pages[0].save(output_path, save_all=True, append_images=pages[1:], resolution=200.0)
     write_ground_truth(output_path, page_lines)
+    write_field_ground_truth(output_path, page_fields)
 
 
 def main():
