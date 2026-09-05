@@ -6,8 +6,10 @@ import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 import pandas as pd
+from sqlalchemy.dialects.postgresql import JSONB
 
 from src.evaluate.benchmark import run_benchmark
 from src.io.publish import append_df, publish_document_to_mongo, push_parquet
@@ -61,13 +63,36 @@ def extract_page_number(path: str) -> int:
     return int(m.group(1)) if m else -1
 
 
+class BenchmarkResult(NamedTuple):
+    """Dataframes + doc payloads from run_ocr_benchmark(return_dataframes=True).
+
+    A real type instead of a positional tuple: this already grew once (3
+    dataframes -> 4) with a brittle isinstance/len sniff at its one call
+    site to cope; a NamedTuple gives attribute access and a real signature
+    instead of extending that sniffing further as fields keep being added.
+    """
+
+    doc_stats: pd.DataFrame
+    page_metrics: pd.DataFrame
+    field_results: pd.DataFrame
+    localization_results: pd.DataFrame
+    doc_contents: list[dict]
+
+
+def _empty_benchmark_result() -> BenchmarkResult:
+    return BenchmarkResult(
+        pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), []
+    )
+
+
 def _build_page_metrics_df(
     results: list[dict], doc_name: str, engine_name: str
 ) -> pd.DataFrame:
     """Build the ocr_page_metrics row for each page result from run_benchmark().
 
-    Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer/fields_*) must
-    match the dict shape produced by src.evaluate.benchmark.run_benchmark.
+    Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer/fields_*/avg_iou/
+    localization_fields_*) must match the dict shape produced by
+    src.evaluate.benchmark.run_benchmark.
     """
     now = datetime.utcnow()
     rows = []
@@ -90,6 +115,9 @@ def _build_page_metrics_df(
                 "fields_total": r.get("fields_total"),
                 "fields_correct": r.get("fields_correct"),
                 "field_accuracy": r.get("field_accuracy"),
+                "avg_iou": r.get("avg_iou"),
+                "localization_fields_total": r.get("localization_fields_total"),
+                "localization_fields_correct": r.get("localization_fields_correct"),
             }
         )
     return pd.DataFrame(rows)
@@ -122,6 +150,48 @@ def _build_field_results_df(
     return pd.DataFrame(rows)
 
 
+def _build_localization_results_df(
+    results: list[dict], doc_name: str, engine_name: str
+) -> pd.DataFrame:
+    """Explode each labeled page's localization_details into one
+    ocr_localization_results row per field. Pages without box ground truth
+    (localization_details is None) contribute no rows.
+
+    Box coordinates are cast to native float here -- EasyOCR's regions
+    carry numpy scalars upstream, which psycopg2's JSONB adapter cannot
+    serialize; casting only at the source (in the engine) isn't enough
+    once boxes have passed through dict/tuple operations, so cast again
+    right before they go into the DataFrame that gets inserted.
+    """
+
+    def _native_bbox(bbox: dict | None) -> dict | None:
+        if bbox is None:
+            return None
+        return {k: float(v) for k, v in bbox.items()}
+
+    rows = []
+    for r in results:
+        localization_details = r.get("localization_details")
+        if not localization_details:
+            continue
+        page = extract_page_number(r["image_path"])
+        for field_name, detail in localization_details.items():
+            rows.append(
+                {
+                    "document": doc_name,
+                    "engine": engine_name,
+                    "page": page,
+                    "field_name": field_name,
+                    "iou": float(detail["iou"]),
+                    "located": detail["located"],
+                    "correct": detail["correct"],
+                    "gt_bbox": _native_bbox(detail["gt_bbox"]),
+                    "predicted_bbox": _native_bbox(detail["predicted_bbox"]),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def run_ocr_benchmark(
     ocr_engine: BaseOCREngine,
     engine_name: str,
@@ -144,15 +214,12 @@ def run_ocr_benchmark(
     grouped_images = get_image_paths_by_document(data_dir)
     if not grouped_images:
         logger.info("No images found in %s", data_dir)
-        return (
-            (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [])
-            if return_dataframes
-            else []
-        )
+        return _empty_benchmark_result() if return_dataframes else []
 
     doc_rows = []
     page_rows: list[pd.DataFrame] = []
     field_rows: list[pd.DataFrame] = []
+    localization_rows: list[pd.DataFrame] = []
     doc_contents: list[dict] = []
 
     for doc_name, img_paths in grouped_images.items():
@@ -186,6 +253,9 @@ def run_ocr_benchmark(
             # Page metrics rows for this doc
             page_rows.append(_build_page_metrics_df(results, doc_name, engine_name))
             field_rows.append(_build_field_results_df(results, doc_name, engine_name))
+            localization_rows.append(
+                _build_localization_results_df(results, doc_name, engine_name)
+            )
 
     if not return_dataframes:
         return doc_contents
@@ -197,7 +267,18 @@ def run_ocr_benchmark(
     df_field_results = (
         pd.concat(field_rows, ignore_index=True) if field_rows else pd.DataFrame()
     )
-    return df_stats_doc, df_page_metrics, df_field_results, doc_contents
+    df_localization_results = (
+        pd.concat(localization_rows, ignore_index=True)
+        if localization_rows
+        else pd.DataFrame()
+    )
+    return BenchmarkResult(
+        df_stats_doc,
+        df_page_metrics,
+        df_field_results,
+        df_localization_results,
+        doc_contents,
+    )
 
 
 def run_ocr_benchmark_and_publish(
@@ -210,7 +291,7 @@ def run_ocr_benchmark_and_publish(
     document_name: str | None = None,
 ):
     # Run and get in-memory DFs (JSONs are also written by run_ocr_benchmark)
-    result = run_ocr_benchmark(
+    result: BenchmarkResult = run_ocr_benchmark(
         ocr_engine=ocr_engine,
         engine_name=engine_name,
         data_dir=data_dir,
@@ -218,35 +299,37 @@ def run_ocr_benchmark_and_publish(
         month=month,
         return_dataframes=True,
     )
-
-    # Handle both return types: tuple (with dataframes) or None
-    doc_contents: list[dict]
-    empty_dfs: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[dict]] = (
-        pd.DataFrame(),
-        pd.DataFrame(),
-        pd.DataFrame(),
-        [],
-    )
-    if result is None:
-        df_stats_doc, df_page_metrics, df_field_results, doc_contents = empty_dfs
-    elif isinstance(result, tuple) and len(result) == 4:
-        df_stats_doc, df_page_metrics, df_field_results, doc_contents = result
-    else:
-        # Should not happen with return_dataframes=True, but handle gracefully
-        logger.warning(f"Unexpected return type from run_ocr_benchmark: {type(result)}")
-        df_stats_doc, df_page_metrics, df_field_results, doc_contents = empty_dfs
+    df_stats_doc = result.doc_stats
+    df_page_metrics = result.page_metrics
+    df_field_results = result.field_results
+    df_localization_results = result.localization_results
+    doc_contents = result.doc_contents
 
     # Attach run_id and persist to Postgres
-    for df in (df_stats_doc, df_page_metrics, df_field_results):
-        if df is not None and not df.empty:
+    for df in (
+        df_stats_doc,
+        df_page_metrics,
+        df_field_results,
+        df_localization_results,
+    ):
+        if not df.empty:
             df["run_id"] = run_id
 
-    if df_stats_doc is not None and not df_stats_doc.empty:
+    if not df_stats_doc.empty:
         append_df("ocr_document_stats", df_stats_doc)
-    if df_page_metrics is not None and not df_page_metrics.empty:
+    if not df_page_metrics.empty:
         append_df("ocr_page_metrics", df_page_metrics)
-    if df_field_results is not None and not df_field_results.empty:
+    if not df_field_results.empty:
         append_df("ocr_field_results", df_field_results)
+    if not df_localization_results.empty:
+        # Explicit JSONB dtype: to_sql's default type inference for
+        # dict-valued pandas columns against a jsonb DDL column isn't
+        # reliable without this.
+        append_df(
+            "ocr_localization_results",
+            df_localization_results,
+            dtype={"gt_bbox": JSONB(), "predicted_bbox": JSONB()},
+        )
 
     # Publish to Mongo
     for doc in doc_contents:
@@ -278,23 +361,29 @@ def run_ocr_benchmark_and_publish(
     # Snapshots to MinIO
     bucket = os.getenv("MINIO_BUCKET", "ocr-artifacts")
     base_key = document_name or "batch"
-    if df_stats_doc is not None and not df_stats_doc.empty:
+    if not df_stats_doc.empty:
         push_parquet(
             df_stats_doc,
             bucket,
             f"runs/{run_id}/stats/{base_key}_document_stats.parquet",
         )
-    if df_page_metrics is not None and not df_page_metrics.empty:
+    if not df_page_metrics.empty:
         push_parquet(
             df_page_metrics,
             bucket,
             f"runs/{run_id}/stats/{base_key}_page_metrics.parquet",
         )
-    if df_field_results is not None and not df_field_results.empty:
+    if not df_field_results.empty:
         push_parquet(
             df_field_results,
             bucket,
             f"runs/{run_id}/stats/{base_key}_field_results.parquet",
+        )
+    if not df_localization_results.empty:
+        push_parquet(
+            df_localization_results,
+            bucket,
+            f"runs/{run_id}/stats/{base_key}_localization_results.parquet",
         )
 
 
