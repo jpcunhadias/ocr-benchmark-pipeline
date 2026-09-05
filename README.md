@@ -32,11 +32,11 @@ The design here is deliberately pluggable: adding a new OCR engine means impleme
 A synthetic sample document ships with the repo at `data/pdf/2025-04/sample-report/`, so you can run the whole pipeline without any external data or services:
 
 ```bash
-# 1. Install the core OCR dependencies (opencv, pytesseract, pdf2image, pillow, pyyaml, pandas, tqdm, psutil, python-dotenv, numpy)
-pip install -r requirements.txt   # or use ./setup_local_dev.sh
+# 1. Install dependencies with uv (see https://docs.astral.sh/uv/ if you don't have it)
+uv sync   # or use ./setup_local_dev.sh
 
 # 2. Run the pipeline end-to-end against the sample PDF
-python run_local_pipeline.py --step all --engine tesseract --input data/pdf/2025-04/sample-report
+uv run python run_local_pipeline.py --step all --engine tesseract --input data/pdf/2025-04/sample-report
 
 # 3. Check the result
 cat results/tesseract/sample-report/extracted_text.txt
@@ -83,16 +83,18 @@ This starts all services in the background. You can then access:
 For lightweight development focused on OCR processing, without any databases:
 
 ```bash
-# Set up the local environment
+# Set up the local environment (creates .venv/ via uv, writes .env.local)
 ./setup_local_dev.sh
 
-# Activate the environment
-source venv/bin/activate
+# Load local env vars
 export $(cat .env.local | xargs)
 
 # Run the local pipeline
-python run_local_pipeline.py --step all --engine tesseract
+uv run python run_local_pipeline.py --step all --engine tesseract
 ```
+
+`uv run` picks up `.venv/` automatically -- no activation needed. If you'd
+rather activate it directly, `source .venv/bin/activate` works too.
 
 **Local development features:**
 - **No Docker required**: Runs Python directly
@@ -179,7 +181,6 @@ For pure local development without any services:
 ```bash
 # One-time setup
 ./setup_local_dev.sh
-source venv/bin/activate
 export $(cat .env.local | xargs)
 
 # Put PDFs under data/pdf/<period>/<document>/
@@ -187,12 +188,12 @@ mkdir -p data/pdf/2025-04/document1
 # Copy your PDFs here
 
 # Run the full pipeline
-python run_local_pipeline.py --step all --engine tesseract
+uv run python run_local_pipeline.py --step all --engine tesseract
 
 # Or run individual steps
-python run_local_pipeline.py --step convert --input data/pdf/2025-04/document1
-python run_local_pipeline.py --step ocr --engine tesseract
-python run_local_pipeline.py --step extract --engine tesseract
+uv run python run_local_pipeline.py --step convert --input data/pdf/2025-04/document1
+uv run python run_local_pipeline.py --step ocr --engine tesseract
+uv run python run_local_pipeline.py --step extract --engine tesseract
 ```
 
 **Benefits of native development:**
@@ -208,7 +209,6 @@ To connect to MinIO, download PDFs, and then run fully offline:
 ```bash
 # 1. Set up the local environment (one time)
 ./setup_local_dev.sh
-source venv/bin/activate
 export $(cat .env.local | xargs)
 
 # 2. Set MinIO credentials in .env.prod:
@@ -217,10 +217,10 @@ export $(cat .env.local | xargs)
 #    MINIO_SECRET_KEY=your_secret_key
 
 # 3. Download PDFs from MinIO (interactive selection)
-PYTHONPATH=$(pwd) python scripts/data_prep/download_pdfs_from_minio.py
+PYTHONPATH=$(pwd) uv run python scripts/data_prep/download_pdfs_from_minio.py
 
 # 4. Run the pipeline offline using the downloaded PDFs
-python run_local_pipeline.py --step all --engine tesseract
+uv run python run_local_pipeline.py --step all --engine tesseract
 ```
 
 **This workflow:**
