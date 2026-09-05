@@ -23,7 +23,7 @@ The whole system is orchestrated with Docker Compose and made up of the followin
 -   **`mongo`**: A MongoDB database storing raw, unstructured OCR JSON output.
 -   **`minio`**: An S3-compatible object store for input PDFs.
 
-The design here is deliberately pluggable: adding a new OCR engine means implementing one small interface (`BaseOCREngine`) and registering it — the rest of the pipeline (conversion, benchmarking, storage, API, dashboard) is engine-agnostic. See [§5](#5--adding-a-new-ocr-engine).
+The design here is deliberately pluggable: adding a new OCR engine means implementing one small interface (`BaseOCREngine`) and registering it — the rest of the pipeline (conversion, benchmarking, storage, API, dashboard) is engine-agnostic. See [§6](#6--adding-a-new-ocr-engine).
 
 ---
 
@@ -241,7 +241,89 @@ Outputs are saved under the `results/<engine-name>/` directory.
 
 ---
 
-## 5 · Adding a New OCR Engine
+## 5 · Accuracy Metrics & Ground Truth
+
+Beyond timing and self-reported confidence, the pipeline measures actual
+correctness against ground truth: character/word error rate (CER/WER) on
+raw OCR text, and field-extraction accuracy on named values (Report ID,
+Date, Route, ...). Both are computed automatically whenever a matching
+label file exists, and simply skipped (left `NULL`) when one doesn't.
+
+### Where ground truth comes from (important: not from OCR)
+
+Ground truth can't come from reading the same document you're trying to
+OCR — that would be circular. Instead it lives in separate label files
+under `data/labels/<document>/`:
+
+-   `<document>_<page>.txt` — the exact text expected on that page (CER/WER).
+-   `<document>_<page>.fields.json` — the exact `{label: value}` pairs
+    expected on that page (field-extraction accuracy), e.g.
+    `{"Report ID:": "RPT-1000", "Date:": "2025-04-14", ...}`.
+
+**For the shipped sample document**, these labels are generated for free.
+`scripts/data_prep/generate_sample_data.py` builds the sample PDF by
+*drawing* known strings onto a blank image with PIL — the Python string
+`"RPT-1000"` exists in memory before a single pixel is drawn. The
+generator writes that same string straight to the label files at
+generation time, so the labels are guaranteed to match what's on the page,
+with zero OCR involved:
+
+```
+Python string "RPT-1000" ──draws pixels──▶ PDF ──rasterize──▶ PNG
+        │                                                       │
+        └──────────────▶ data/labels/.../*.fields.json          │
+                                   │                             ▼
+                                   │                   Tesseract/EasyOCR
+                                   │                   reads the PIXELS
+                                   │                   (no access to the
+                                   │                   original string)
+                                   ▼                             │
+                         field_accuracy() compares  ◀────────────┘
+                         these two independent strings
+```
+
+**For real (non-synthetic) documents, this trick doesn't apply.** There's
+no shortcut: label files have to come from a human reading the actual
+document and typing the correct values, or from an already-verified
+external system of record (e.g. the shipment database the report was
+generated from) — never from OCR-ing the document again. The pipeline
+doesn't care where a label file came from, only that it exists; just drop
+`.txt`/`.fields.json` files under `data/labels/<document>/` matching the
+`<document>_<page>` naming used by `convert_pdfs_to_images.py`, and both
+metrics activate automatically on the next run.
+
+### CER/WER (`src/evaluate/metrics.py`)
+
+Character Error Rate and Word Error Rate (via `jiwer`) between the raw OCR
+text and the `.txt` label — a low-level measure of text fidelity.
+
+### Field-extraction accuracy (`src/evaluate/field_extraction.py`)
+
+A higher-level, business-relevant measure: did the engine get the actual
+*values* right, not just the characters? Two runs can have near-identical
+CER/WER and very different real-world usefulness if the one character
+error lands inside a date or an ID. `extract_fields()` scans the engine's
+raw text for each expected label and takes the rest of that line as the
+value (no layout assumptions — works on any engine's output, so it applies
+to future engines with no interface changes); `field_accuracy()` compares
+that against the `.fields.json` label (whitespace/case-normalized) and
+reports both a per-page summary and a per-field breakdown (which specific
+fields an engine tends to get wrong).
+
+### Where to see it
+
+-   **Dashboard** (`http://localhost:8501`): "Accuracy by Engine", "Field
+    Extraction Accuracy" (per-field breakdown chart), and "Page Accuracy"
+    sections.
+-   **API**: `GET /records/accuracy-summary`, `GET /records/field-accuracy`,
+    `GET /records/runs/{run_id}/page-metrics`.
+-   **Storage**: `ocr_page_metrics` (per-page `cer`/`wer`/`field_accuracy`
+    summary) and `ocr_field_results` (per-field detail) in PostgreSQL — see
+    `scripts/db/pg_ddl.sql`.
+
+---
+
+## 6 · Adding a New OCR Engine
 
 To add support for a new OCR engine, follow these three steps:
 
@@ -287,7 +369,7 @@ make run ENGINE=myengine
 
 ---
 
-## 6 · Developer Commands (`Makefile`)
+## 7 · Developer Commands (`Makefile`)
 
 The `Makefile` provides convenient shortcuts for common tasks.
 
