@@ -122,6 +122,12 @@ def field_accuracy_breakdown(period: str | None = None):
     return api_get("/records/field-accuracy", params)
 
 
+@st.cache_data(ttl=60)
+def localization_accuracy_breakdown(period: str | None = None):
+    params = {"period": period} if period else None
+    return api_get("/records/localization-accuracy", params)
+
+
 def df_or_empty(rows) -> pd.DataFrame:
     return pd.DataFrame(rows) if isinstance(rows, list) and rows else pd.DataFrame()
 
