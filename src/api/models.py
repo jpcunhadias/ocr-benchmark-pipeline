@@ -44,6 +44,9 @@ class PageMetric(BaseModel):
     char_count: int | None = None
     cer: float | None = None
     wer: float | None = None
+    fields_total: int | None = None
+    fields_correct: int | None = None
+    field_accuracy: float | None = None
 
 
 class AccuracySummary(BaseModel):
@@ -52,6 +55,15 @@ class AccuracySummary(BaseModel):
     labeled_pages: int
     avg_cer: float | None = None
     avg_wer: float | None = None
+    avg_field_accuracy: float | None = None
+
+
+class FieldAccuracyBreakdown(BaseModel):
+    engine: str | None = None
+    field_name: str
+    total: int
+    correct: int
+    accuracy: float | None = None
 
 
 class ThroughputSummary(BaseModel):
