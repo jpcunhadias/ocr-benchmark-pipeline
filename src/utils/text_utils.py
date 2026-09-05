@@ -1,14 +1,12 @@
 import math
 from decimal import Decimal
 from numbers import Integral, Real
-from typing import Any, Union
+from typing import Any
 
-Number = Union[int, float]
+Number = int | float
 
 
-def sanitize_numeric_value(
-    value: Any, *, as_int: bool | None = None
-) -> Number | None:
+def sanitize_numeric_value(value: Any, *, as_int: bool | None = None) -> Number | None:
     """
     Coerce inputs into numeric types safe for database insertion.
 

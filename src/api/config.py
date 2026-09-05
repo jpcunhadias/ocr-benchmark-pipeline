@@ -18,8 +18,9 @@ class Settings:
     APP_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     APP_PORT: int = int(os.getenv("API_PORT", "8080"))
 
+    # Uppercase name is intentional -- mirrors this dataclass's other env-var fields.
     @property
-    def CORS_ORIGINS(self) -> list[str]:
+    def CORS_ORIGINS(self) -> list[str]:  # noqa: N802
         return [o.strip() for o in self.CORS_ORIGINS_RAW.split(",") if o.strip()]
 
 

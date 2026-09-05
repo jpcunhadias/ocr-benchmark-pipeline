@@ -24,16 +24,11 @@ def get_mongo_client(uri: str | None = None) -> MongoClient:
         client.admin.command("ping")
         return client
     except errors.PyMongoError as e:
-        raise RuntimeError(f"[ERROR] MongoDB connection failed: {e}")
+        raise RuntimeError(f"[ERROR] MongoDB connection failed: {e}") from e
 
 
 def _iso_utc_now() -> str:
-    return (
-        datetime.now(UTC)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _assert_doc_ok(doc: dict) -> None:
@@ -183,10 +178,7 @@ def load_json_document(json_path: Path) -> dict:
 
 def _normalize_key(key_obj):
     # key_obj can be SON/dict (has .items()) or list of tuples
-    if hasattr(key_obj, "items"):
-        seq = list(key_obj.items())
-    else:
-        seq = list(key_obj)  # assume list of (field, direction)
+    seq = list(key_obj.items()) if hasattr(key_obj, "items") else list(key_obj)
     # sort to avoid order issues in comparison
     return sorted(seq, key=lambda kv: kv[0])
 
