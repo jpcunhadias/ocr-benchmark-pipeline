@@ -12,6 +12,30 @@ It automates the whole workflow:
 
 ---
 
+## Screenshots
+
+**Run history and accuracy-by-engine**, computed automatically once ground-truth labels exist for a document:
+
+![Dashboard overview](docs/screenshots/dashboard-overview.png)
+
+**Field-extraction accuracy** — did each engine get the actual field *values* right (not just raw characters), broken down per field:
+
+![Field extraction accuracy](docs/screenshots/field-extraction-accuracy.png)
+
+**Localization accuracy** — did each engine also find *where* each field is on the page, measured as IoU against ground-truth boxes:
+
+![Localization accuracy](docs/screenshots/localization-accuracy.png)
+
+**Confidence calibration and throughput** — does each engine's self-reported confidence actually track its accuracy, and how fast is it:
+
+![Confidence calibration and throughput](docs/screenshots/confidence-and-throughput.png)
+
+**Field localization preview** — ground-truth (green) and predicted (blue/red) boxes rendered on the actual source page, on demand from MinIO:
+
+![Field localization preview](docs/screenshots/field-localization-preview.png)
+
+---
+
 ## 1 · Architecture
 
 The whole system is orchestrated with Docker Compose and made up of the following services:
