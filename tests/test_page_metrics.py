@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.ocr.run_benchmark import _build_page_metrics_df
+from scripts.ocr.run_benchmark import _build_field_results_df, _build_page_metrics_df
 
 
 def _page_result(**overrides) -> dict:
@@ -54,3 +54,42 @@ def test_cer_wer_none_when_unlabeled():
 
     assert row["cer"] is None
     assert row["wer"] is None
+
+
+def _field_result(**overrides) -> dict:
+    base = {
+        "image_path": "data/processed/doc1/doc1_001.png",
+        "field_details": {
+            "Report ID:": {
+                "expected": "RPT-1000",
+                "extracted": "RPT-1000",
+                "correct": True,
+            },
+            "Status:": {"expected": "PASSED", "extracted": "PA55ED", "correct": False},
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_build_field_results_df_explodes_per_field_rows():
+    df = _build_field_results_df(
+        [_field_result()], doc_name="doc1", engine_name="tesseract"
+    )
+
+    assert len(df) == 2
+    row = df[df["field_name"] == "Status:"].iloc[0]
+    assert row["document"] == "doc1"
+    assert row["engine"] == "tesseract"
+    assert row["page"] == 1
+    assert row["expected_value"] == "PASSED"
+    assert row["extracted_value"] == "PA55ED"
+    assert bool(row["correct"]) is False
+
+
+def test_build_field_results_df_skips_unlabeled_pages():
+    df = _build_field_results_df(
+        [_field_result(field_details=None)], doc_name="doc1", engine_name="tesseract"
+    )
+
+    assert df.empty

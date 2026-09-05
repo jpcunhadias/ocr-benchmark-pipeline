@@ -66,8 +66,8 @@ def _build_page_metrics_df(
 ) -> pd.DataFrame:
     """Build the ocr_page_metrics row for each page result from run_benchmark().
 
-    Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer) must match the
-    dict shape produced by src.evaluate.benchmark.run_benchmark.
+    Keys here (elapsed_sec/avg_confidence/n_chars/cer/wer/fields_*) must
+    match the dict shape produced by src.evaluate.benchmark.run_benchmark.
     """
     now = datetime.utcnow()
     rows = []
@@ -87,8 +87,38 @@ def _build_page_metrics_df(
                 "char_count": r.get("n_chars", 0),
                 "cer": r.get("cer"),
                 "wer": r.get("wer"),
+                "fields_total": r.get("fields_total"),
+                "fields_correct": r.get("fields_correct"),
+                "field_accuracy": r.get("field_accuracy"),
             }
         )
+    return pd.DataFrame(rows)
+
+
+def _build_field_results_df(
+    results: list[dict], doc_name: str, engine_name: str
+) -> pd.DataFrame:
+    """Explode each labeled page's field_details into one ocr_field_results
+    row per field. Pages without field ground truth (field_details is None)
+    contribute no rows."""
+    rows = []
+    for r in results:
+        field_details = r.get("field_details")
+        if not field_details:
+            continue
+        page = extract_page_number(r["image_path"])
+        for field_name, detail in field_details.items():
+            rows.append(
+                {
+                    "document": doc_name,
+                    "engine": engine_name,
+                    "page": page,
+                    "field_name": field_name,
+                    "expected_value": detail["expected"],
+                    "extracted_value": detail["extracted"],
+                    "correct": detail["correct"],
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -114,10 +144,15 @@ def run_ocr_benchmark(
     grouped_images = get_image_paths_by_document(data_dir)
     if not grouped_images:
         logger.info("No images found in %s", data_dir)
-        return (pd.DataFrame(), pd.DataFrame(), []) if return_dataframes else []
+        return (
+            (pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), [])
+            if return_dataframes
+            else []
+        )
 
     doc_rows = []
     page_rows: list[pd.DataFrame] = []
+    field_rows: list[pd.DataFrame] = []
     doc_contents: list[dict] = []
 
     for doc_name, img_paths in grouped_images.items():
@@ -150,6 +185,7 @@ def run_ocr_benchmark(
 
             # Page metrics rows for this doc
             page_rows.append(_build_page_metrics_df(results, doc_name, engine_name))
+            field_rows.append(_build_field_results_df(results, doc_name, engine_name))
 
     if not return_dataframes:
         return doc_contents
@@ -158,7 +194,10 @@ def run_ocr_benchmark(
     df_page_metrics = (
         pd.concat(page_rows, ignore_index=True) if page_rows else pd.DataFrame()
     )
-    return df_stats_doc, df_page_metrics, doc_contents
+    df_field_results = (
+        pd.concat(field_rows, ignore_index=True) if field_rows else pd.DataFrame()
+    )
+    return df_stats_doc, df_page_metrics, df_field_results, doc_contents
 
 
 def run_ocr_benchmark_and_publish(
@@ -182,17 +221,23 @@ def run_ocr_benchmark_and_publish(
 
     # Handle both return types: tuple (with dataframes) or None
     doc_contents: list[dict]
+    empty_dfs: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[dict]] = (
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        [],
+    )
     if result is None:
-        df_stats_doc, df_page_metrics, doc_contents = pd.DataFrame(), pd.DataFrame(), []
-    elif isinstance(result, tuple) and len(result) == 3:
-        df_stats_doc, df_page_metrics, doc_contents = result
+        df_stats_doc, df_page_metrics, df_field_results, doc_contents = empty_dfs
+    elif isinstance(result, tuple) and len(result) == 4:
+        df_stats_doc, df_page_metrics, df_field_results, doc_contents = result
     else:
         # Should not happen with return_dataframes=True, but handle gracefully
         logger.warning(f"Unexpected return type from run_ocr_benchmark: {type(result)}")
-        df_stats_doc, df_page_metrics, doc_contents = pd.DataFrame(), pd.DataFrame(), []
+        df_stats_doc, df_page_metrics, df_field_results, doc_contents = empty_dfs
 
     # Attach run_id and persist to Postgres
-    for df in (df_stats_doc, df_page_metrics):
+    for df in (df_stats_doc, df_page_metrics, df_field_results):
         if df is not None and not df.empty:
             df["run_id"] = run_id
 
@@ -200,6 +245,8 @@ def run_ocr_benchmark_and_publish(
         append_df("ocr_document_stats", df_stats_doc)
     if df_page_metrics is not None and not df_page_metrics.empty:
         append_df("ocr_page_metrics", df_page_metrics)
+    if df_field_results is not None and not df_field_results.empty:
+        append_df("ocr_field_results", df_field_results)
 
     # Publish to Mongo
     for doc in doc_contents:
@@ -242,6 +289,12 @@ def run_ocr_benchmark_and_publish(
             df_page_metrics,
             bucket,
             f"runs/{run_id}/stats/{base_key}_page_metrics.parquet",
+        )
+    if df_field_results is not None and not df_field_results.empty:
+        push_parquet(
+            df_field_results,
+            bucket,
+            f"runs/{run_id}/stats/{base_key}_field_results.parquet",
         )
 
 
