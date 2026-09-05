@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import text
 
 from src.ocr_engines.utils import normalize_confidence
@@ -10,10 +13,12 @@ from ..models import (
     Extraction,
     FieldAccuracyBreakdown,
     LocalizationAccuracyBreakdown,
+    LocalizationResult,
     PageMetric,
     Run,
     ThroughputSummary,
 )
+from ..services.page_image import MinioConnectionError, render_page_image
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -306,3 +311,73 @@ async def get_localization_accuracy(
         rows = res.mappings().all()
 
         return [LocalizationAccuracyBreakdown(**row) for row in rows]
+
+
+def _as_dict(value) -> dict | None:
+    """JSONB columns should already come back as parsed dicts via
+    SQLAlchemy's asyncpg dialect; fall back to json.loads() defensively in
+    case a raw string ever shows up instead."""
+    if value is None or isinstance(value, dict):
+        return value
+    return json.loads(value)
+
+
+@router.get(
+    "/runs/{run_id}/localization-results", response_model=list[LocalizationResult]
+)
+async def get_localization_results(
+    run_id: str,
+    document: str = Query(..., description="Document name (PDF stem)."),
+    page: int = Query(..., description="Page number (1-indexed)."),
+):
+    """Raw per-field localization rows for one specific page -- the data
+    behind the box-overlay preview. Every row that exists is inherently
+    labeled (rows are only ever inserted when box ground truth exists), so
+    there's no only_labeled filter to expose here."""
+    async with AsyncSessionLocal() as session:
+        q = text(
+            """
+            SELECT run_id, document, engine, page, field_name, iou, located, correct,
+                   gt_bbox, predicted_bbox
+            FROM ocr_localization_results
+            WHERE run_id = :run_id AND document = :document AND page = :page
+            ORDER BY field_name
+            """
+        )
+        res = await session.execute(
+            q, {"run_id": run_id, "document": document, "page": page}
+        )
+        rows = res.mappings().all()
+
+        results = []
+        for row in rows:
+            row_dict = dict(row)
+            row_dict["gt_bbox"] = _as_dict(row_dict["gt_bbox"])
+            row_dict["predicted_bbox"] = _as_dict(row_dict["predicted_bbox"])
+            results.append(LocalizationResult(**row_dict))
+        return results
+
+
+@router.get("/runs/{run_id}/page-image")
+async def get_page_image(
+    run_id: str,
+    document: str = Query(..., description="Document name (PDF stem)."),
+    page: int = Query(..., description="Page number (1-indexed)."),
+):
+    """Re-render one page of the run's source PDF (from MinIO) as PNG
+    bytes -- the pipeline treats converted PNGs as disposable, so this is
+    rendered on demand rather than read from a persisted file."""
+    try:
+        png_bytes = await render_page_image(run_id, document, page)
+    except MinioConnectionError as err:
+        raise HTTPException(
+            status_code=502, detail=f"Could not reach object storage: {err}"
+        ) from err
+
+    if png_bytes is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No source PDF found for this run/document/page.",
+        )
+
+    return Response(content=png_bytes, media_type="image/png")

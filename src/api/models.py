@@ -79,6 +79,19 @@ class LocalizationAccuracyBreakdown(BaseModel):
     avg_iou: float | None = None
 
 
+class LocalizationResult(BaseModel):
+    run_id: str
+    document: str
+    engine: str | None = None
+    page: int | None = None
+    field_name: str
+    iou: float | None = None
+    located: bool | None = None
+    correct: bool | None = None
+    gt_bbox: dict | None = None
+    predicted_bbox: dict | None = None
+
+
 class ThroughputSummary(BaseModel):
     engine: str | None = None
     total_pages: int
