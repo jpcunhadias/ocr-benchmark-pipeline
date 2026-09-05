@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS ocr_page_metrics (
   elapsed_sec     NUMERIC,
   avg_confidence  NUMERIC,
   char_count      INT,
+  cer             NUMERIC,  -- character error rate vs. data/labels ground truth; NULL when unlabeled
+  wer             NUMERIC,  -- word error rate vs. data/labels ground truth; NULL when unlabeled
   PRIMARY KEY (run_id, document, page)
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_page_metrics_engine ON ocr_page_metrics(engine);
