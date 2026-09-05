@@ -42,4 +42,34 @@ class EasyOCREngine(BaseOCREngine):
             round(sum(confidences) / len(confidences), 4) if confidences else None
         )
 
-        return {"text": extracted_text, "confidence": avg_conf, "engine": "EasyOCR"}
+        # img_np is the preprocessed array actually handed to readtext --
+        # normalizing against its own shape (not the source file's) keeps
+        # boxes correct even if preprocessing rotated/resized the page.
+        img_height, img_width = img_np.shape[:2]
+        regions: list[dict] = []
+        for quad, text, conf in results:
+            xs = [float(point[0]) for point in quad]
+            ys = [float(point[1]) for point in quad]
+            left, top = min(xs), min(ys)
+            width, height = max(xs) - left, max(ys) - top
+            regions.append(
+                {
+                    "text": text,
+                    "confidence": (
+                        float(conf) if isinstance(conf, float | int) else None
+                    ),
+                    "bbox": {
+                        "left": left / img_width,
+                        "top": top / img_height,
+                        "width": width / img_width,
+                        "height": height / img_height,
+                    },
+                }
+            )
+
+        return {
+            "text": extracted_text,
+            "confidence": avg_conf,
+            "engine": "EasyOCR",
+            "regions": regions,
+        }

@@ -27,5 +27,13 @@ class BaseOCREngine(ABC):
                 - 'text': Extracted text (str)
                 - 'confidence': Confidence score (float or None)
                 - 'engine': Name of the OCR engine (str)
+                - 'regions' (optional): Per-detection boxes, list of:
+                    {"text": str, "confidence": float | None,
+                     "bbox": {"left": float, "top": float,
+                              "width": float, "height": float}}
+                    bbox values are fractions (0-1) of the image's own
+                    width/height (as loaded for OCR, post-preprocessing),
+                    not pixels -- keeps boxes comparable across engines and
+                    across images rasterized at different resolutions.
         """
         pass
