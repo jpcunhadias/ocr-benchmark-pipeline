@@ -4,6 +4,7 @@
 DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS ocr_document_stats CASCADE;
 DROP TABLE IF EXISTS ocr_page_metrics CASCADE;
+DROP TABLE IF EXISTS ocr_field_results CASCADE;
 DROP TABLE IF EXISTS extractions CASCADE;
 DROP TABLE IF EXISTS runs CASCADE;
 
@@ -68,9 +69,26 @@ CREATE TABLE IF NOT EXISTS ocr_page_metrics (
   char_count      INT,
   cer             NUMERIC,  -- character error rate vs. data/labels ground truth; NULL when unlabeled
   wer             NUMERIC,  -- word error rate vs. data/labels ground truth; NULL when unlabeled
+  fields_total    INT,      -- number of labeled fields for this page; NULL when unlabeled
+  fields_correct  INT,      -- number of those fields extracted correctly; NULL when unlabeled
+  field_accuracy  NUMERIC,  -- fields_correct / fields_total; NULL when unlabeled
   PRIMARY KEY (run_id, document, page)
 );
 CREATE INDEX IF NOT EXISTS idx_ocr_page_metrics_engine ON ocr_page_metrics(engine);
+
+-- Per-field extraction results (which specific fields each engine gets wrong)
+CREATE TABLE IF NOT EXISTS ocr_field_results (
+  run_id          TEXT,
+  document        TEXT NOT NULL,
+  engine          TEXT,
+  page            INT,
+  field_name      TEXT NOT NULL,
+  expected_value  TEXT,
+  extracted_value TEXT,
+  correct         BOOLEAN,
+  PRIMARY KEY (run_id, document, page, field_name)
+);
+CREATE INDEX IF NOT EXISTS idx_ocr_field_results_engine_field ON ocr_field_results(engine, field_name);
 
 -- Cleaned OCR text extracted per page
 CREATE TABLE IF NOT EXISTS extractions (
