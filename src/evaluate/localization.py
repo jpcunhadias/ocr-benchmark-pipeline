@@ -26,6 +26,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.ocr_engines.utils import group_regions_into_lines
+
 LABELS_ROOT = Path("data/labels")
 IOU_THRESHOLD = 0.5  # standard object-detection / document-AI convention
 
@@ -47,50 +49,6 @@ def load_field_boxes_ground_truth(
     if not gt_path.exists():
         return None
     return json.loads(gt_path.read_text(encoding="utf-8"))
-
-
-def group_regions_into_lines(regions: list[dict]) -> list[list[dict]]:
-    """Cluster regions into reading-order lines using vertical position only
-    -- engine-agnostic, since only Tesseract exposes an explicit line
-    grouping and EasyOCR has no equivalent.
-
-    Regions are sorted by vertical center and greedily joined into the
-    current line while their center stays within a tolerance of that
-    line's running average height (not the new region's own height alone --
-    a lone ":" glyph's box is much shorter than its neighbors and would
-    otherwise fail to cluster). Each resulting line is then sorted
-    left-to-right for reading order.
-    """
-    if not regions:
-        return []
-
-    def center(r: dict) -> float:
-        return r["bbox"]["top"] + r["bbox"]["height"] / 2
-
-    ordered = sorted(regions, key=center)
-    lines: list[list[dict]] = [[ordered[0]]]
-    line_avg_height = ordered[0]["bbox"]["height"]
-    line_avg_center = center(ordered[0])
-
-    for region in ordered[1:]:
-        tolerance = 0.75 * line_avg_height
-        if abs(center(region) - line_avg_center) <= tolerance:
-            lines[-1].append(region)
-        else:
-            lines.append([region])
-            line_avg_height = region["bbox"]["height"]
-            line_avg_center = center(region)
-            continue
-
-        current_line = lines[-1]
-        line_avg_height = sum(r["bbox"]["height"] for r in current_line) / len(
-            current_line
-        )
-        line_avg_center = sum(center(r) for r in current_line) / len(current_line)
-
-    for line in lines:
-        line.sort(key=lambda r: r["bbox"]["left"])
-    return lines
 
 
 def _union_bbox(regions: list[dict]) -> dict:
