@@ -16,7 +16,10 @@ except Exception:
     pd = None  # type: ignore
 
 
-def _json_default(o: Any):
+def json_default(o: Any):
+    """json.dumps(..., default=...) hook for types the pipeline commonly
+    produces (pandas Timestamps, numpy scalars, Path, set) that the stdlib
+    json module doesn't know how to serialize on its own."""
     # Datetimes
     if isinstance(o, datetime | date):
         return o.isoformat()
@@ -58,6 +61,6 @@ def save_document_result(
     }
 
     output_file.write_text(
-        json.dumps(document, indent=4, ensure_ascii=False, default=_json_default)
+        json.dumps(document, indent=4, ensure_ascii=False, default=json_default)
     )
     return document
