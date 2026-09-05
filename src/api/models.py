@@ -47,6 +47,9 @@ class PageMetric(BaseModel):
     fields_total: int | None = None
     fields_correct: int | None = None
     field_accuracy: float | None = None
+    avg_iou: float | None = None
+    localization_fields_total: int | None = None
+    localization_fields_correct: int | None = None
 
 
 class AccuracySummary(BaseModel):
@@ -56,6 +59,7 @@ class AccuracySummary(BaseModel):
     avg_cer: float | None = None
     avg_wer: float | None = None
     avg_field_accuracy: float | None = None
+    avg_iou: float | None = None
 
 
 class FieldAccuracyBreakdown(BaseModel):
@@ -64,6 +68,15 @@ class FieldAccuracyBreakdown(BaseModel):
     total: int
     correct: int
     accuracy: float | None = None
+
+
+class LocalizationAccuracyBreakdown(BaseModel):
+    engine: str | None = None
+    field_name: str
+    total: int
+    located: int
+    correct: int
+    avg_iou: float | None = None
 
 
 class ThroughputSummary(BaseModel):

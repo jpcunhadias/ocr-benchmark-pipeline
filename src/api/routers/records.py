@@ -9,6 +9,7 @@ from ..models import (
     CalibrationPoint,
     Extraction,
     FieldAccuracyBreakdown,
+    LocalizationAccuracyBreakdown,
     PageMetric,
     Run,
     ThroughputSummary,
@@ -103,7 +104,8 @@ async def get_page_metrics(
     async with AsyncSessionLocal() as session:
         query_str = """
             SELECT run_id, timestamp, document, engine, page, elapsed_sec, avg_confidence, char_count,
-                   cer, wer, fields_total, fields_correct, field_accuracy
+                   cer, wer, fields_total, fields_correct, field_accuracy,
+                   avg_iou, localization_fields_total, localization_fields_correct
             FROM ocr_page_metrics
             WHERE run_id = :run_id
         """
@@ -131,8 +133,8 @@ async def get_accuracy_summary(
         None, description="Restrict to runs from this period (YYYY-MM)."
     ),
 ):
-    """Mean CER/WER/field-accuracy per engine, over pages with a ground-truth
-    label under data/labels/."""
+    """Mean CER/WER/field-accuracy/IoU per engine, over pages with a
+    ground-truth label under data/labels/."""
     async with AsyncSessionLocal() as session:
         query_str = """
             SELECT m.engine,
@@ -140,7 +142,8 @@ async def get_accuracy_summary(
                    COUNT(m.cer) AS labeled_pages,
                    AVG(m.cer) AS avg_cer,
                    AVG(m.wer) AS avg_wer,
-                   AVG(m.field_accuracy) AS avg_field_accuracy
+                   AVG(m.field_accuracy) AS avg_field_accuracy,
+                   AVG(m.avg_iou) AS avg_iou
             FROM ocr_page_metrics m
         """
         params = {}
@@ -267,3 +270,39 @@ async def get_field_accuracy(
         rows = res.mappings().all()
 
         return [FieldAccuracyBreakdown(**row) for row in rows]
+
+
+@router.get(
+    "/localization-accuracy", response_model=list[LocalizationAccuracyBreakdown]
+)
+async def get_localization_accuracy(
+    period: str | None = Query(
+        None, description="Restrict to runs from this period (YYYY-MM)."
+    ),
+):
+    """Per (engine, field_name) localization accuracy (IoU-based) -- did the
+    engine find WHERE each field is, not just what it says, across all
+    box-labeled pages."""
+    async with AsyncSessionLocal() as session:
+        query_str = """
+            SELECT l.engine,
+                   l.field_name,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN l.located THEN 1 ELSE 0 END) AS located,
+                   SUM(CASE WHEN l.correct THEN 1 ELSE 0 END) AS correct,
+                   AVG(l.iou) AS avg_iou
+            FROM ocr_localization_results l
+        """
+        params = {}
+
+        if period:
+            query_str += " JOIN runs r ON r.run_id = l.run_id WHERE r.period = :period"
+            params["period"] = period
+
+        query_str += " GROUP BY l.engine, l.field_name ORDER BY l.engine, avg_iou ASC"
+
+        q = text(query_str)
+        res = await session.execute(q, params)
+        rows = res.mappings().all()
+
+        return [LocalizationAccuracyBreakdown(**row) for row in rows]
