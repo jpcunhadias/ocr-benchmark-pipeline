@@ -1,12 +1,15 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, StringConstraints
+
+Period = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}$")]  # 'YYYY-MM'
 
 
 class Run(BaseModel):
     run_id: str
     source_id: str | None = None
-    period: constr(pattern=r"^\d{4}-\d{2}$")  # 'YYYY-MM'
+    period: Period
     engine: str | None = None
     pipeline_version: str | None = None
     config_hash: str | None = None
