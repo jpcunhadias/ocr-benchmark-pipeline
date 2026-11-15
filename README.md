@@ -1,6 +1,6 @@
 # OCR Benchmark Pipeline & Dashboard
 
-This project provides a fully containerized pipeline for benchmarking OCR engines against scanned documents, plus a web dashboard for browsing the results.
+This project provides a fully containerized pipeline for benchmarking OCR engines on PDF documents, plus a web dashboard for browsing the results.
 
 It automates the whole workflow:
 1.  **Ingestion**: Downloads PDFs from a MinIO object store.
@@ -30,9 +30,30 @@ It automates the whole workflow:
 
 ![Confidence calibration and throughput](docs/screenshots/confidence-and-throughput.png)
 
+With only the two pages of the sample document scored, the calibration chart shows the mechanism working, not a calibration result for either engine.
+
 **Field localization preview** — ground-truth (green) and predicted (blue/red) boxes rendered on the actual source page, on demand from MinIO:
 
 ![Field localization preview](docs/screenshots/field-localization-preview.png)
+
+---
+
+## Results on the sample document (run of 2026-09-05)
+
+| Engine | CER | WER | Fields correct | Fields located (IoU ≥ 0.5) | Mean IoU | Seconds per page |
+|---|---:|---:|---:|---:|---:|---:|
+| Tesseract | 0.0025 | 0.0417 | 5/5 | 5/5 | 0.92 | 1.39 |
+| EasyOCR | 0.0076 | 0.0417 | 3/5 | 5/5 | 0.64 | 18.82 |
+
+Per page, averaged over the two pages. EasyOCR misread the Report ID (`RPT-10oo`) and dropped the period in the inspector's name (`J Alvarez`). Both engines locate every field at the 0.5 IoU threshold. The lower mean IoU for EasyOCR comes from taller boxes, not from missed fields. The per-page numbers, per-field values and resource usage are in [`docs/benchmark-2026-09-05.json`](docs/benchmark-2026-09-05.json).
+
+**Scope.** This checks that the pipeline and the metrics work end to end. It is not a general ranking of the engines:
+
+-   The ground truth is one synthetic document: two noise-free pages drawn by `scripts/data_prep/generate_sample_data.py`, which differ only in Report ID and page number.
+-   The field parsing and field location heuristics were developed against these same pages, and there is no held-out document.
+-   The engines run with different settings: EasyOCR with `lang_list: [pt, en]`, Tesseract with `lang: eng` and `psm: 6` (`configs/engines/`).
+
+A real comparison needs labelled scans with noise, skew and varied layouts (see section 5 on where labels come from).
 
 ---
 
@@ -277,9 +298,10 @@ Outputs are saved under the `results/<engine-name>/` directory.
 
 Beyond timing and self-reported confidence, the pipeline measures actual
 correctness against ground truth: character/word error rate (CER/WER) on
-raw OCR text, and field-extraction accuracy on named values (Report ID,
-Date, Route, ...). Both are computed automatically whenever a matching
-label file exists, and simply skipped (left `NULL`) when one doesn't.
+raw OCR text, field-extraction accuracy on named values (Report ID,
+Date, Route, ...), and localization accuracy (IoU between predicted and
+ground-truth field boxes). Each is computed automatically whenever its
+label file exists, and simply skipped (left `NULL`) when it doesn't.
 
 ### Where ground truth comes from (important: not from OCR)
 
@@ -342,6 +364,18 @@ that against the `.fields.json` label (whitespace/case-normalized) and
 reports both a per-page summary and a per-field breakdown (which specific
 fields an engine tends to get wrong).
 
+### Localization accuracy (`src/evaluate/localization.py`)
+
+Did the engine also find *where* each field is on the page? The engine's
+word `regions` are grouped into lines; on the line holding each expected
+label, the union of the regions after the label is the predicted value
+box, and it is compared with the box in
+`<document>_<page>.boxes.json` by intersection-over-union. A field counts
+as located when IoU ≥ 0.5 (`IOU_THRESHOLD`). All boxes are fractions of
+the page's width and height, so the generator's canvas size and the
+300 DPI rasterization can't distort the comparison. An engine that
+returns no `regions` gets no localization score.
+
 ### Where to see it
 
 -   **Dashboard** (`http://localhost:8501`): "Accuracy by Engine", "Field
@@ -374,7 +408,20 @@ To add support for a new OCR engine, follow these three steps:
 
         def predict(self, image_path: str) -> dict:
             # Your prediction logic here
-            return {"text": "extracted text", "confidence": 0.95, "engine": "MyEngine"}
+            return {
+                "text": "extracted text",
+                "confidence": 0.95,
+                "engine": "MyEngine",
+                # Per-word boxes as fractions (0-1) of the image size.
+                # Without them the engine gets no localization (IoU) score.
+                "regions": [
+                    {
+                        "text": "RPT-1000",
+                        "confidence": 0.97,
+                        "bbox": {"left": 0.33, "top": 0.16, "width": 0.09, "height": 0.01},
+                    },
+                ],
+            }
     ```
 
 3.  **Register the engine**: Add a loader for your new engine to `ENGINE_LOADERS` in `src/ocr_engines/utils.py`. Each loader imports its engine's class lazily, so an engine's dependencies (e.g. EasyOCR's `torch`) are only pulled in when that engine is actually used.
@@ -389,9 +436,12 @@ To add support for a new OCR engine, follow these three steps:
     ENGINE_LOADERS = {
         "tesseract": _load_tesseract_engine,
         "easyocr": _load_easyocr_engine,
+        "paddleocr": _load_paddleocr_engine,
         "myengine": _load_myengine_engine,  # Add it to the dict
     }
     ```
+
+    If the engine's confidence is not on a 0-1 scale, also add its maximum to `CONFIDENCE_SCALE_MAX` in the same file (Tesseract reports 0-100), so the calibration chart compares engines on one scale.
 
 After following these steps, you can run the pipeline with your new engine:
 
