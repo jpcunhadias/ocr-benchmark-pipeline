@@ -1,0 +1,226 @@
+{
+  "run_date": "2026-09-05",
+  "document": "sample_delivery_report (2 synthetic pages, data/labels/sample_delivery_report/)",
+  "scope": "Synthetic, noise-free pages drawn by scripts/data_prep/generate_sample_data.py; pages differ only in Report ID and page number. IoU threshold 0.5 (src/evaluate/localization.py). Engine configs differ: EasyOCR lang_list [pt, en], Tesseract lang eng psm 6.",
+  "source": "results/<engine>/2025-04/sample-report/sample_delivery_report/sample_delivery_report.json and results/resource_report.csv (gitignored run outputs, summarised here)",
+  "engines": {
+    "tesseract": {
+      "pages": [
+        {
+          "page": 1,
+          "timestamp": "2026-09-05T22:03:57.904696+00:00",
+          "elapsed_sec": 1.41,
+          "avg_confidence": 95.3,
+          "cer": 0.0025252525252525255,
+          "wer": 0.041666666666666664,
+          "fields_correct": 5,
+          "fields_total": 5,
+          "field_accuracy": 1.0,
+          "localization_fields_correct": 5,
+          "localization_fields_total": 5,
+          "avg_iou": 0.92250707455734,
+          "field_details": {
+            "Report ID:": {
+              "expected": "RPT-1000",
+              "extracted": "RPT-1000",
+              "correct": true
+            },
+            "Date:": {
+              "expected": "2025-04-14",
+              "extracted": "2025-04-14",
+              "correct": true
+            },
+            "Route:": {
+              "expected": "Warehouse 4 -> Distribution Center B",
+              "extracted": "Warehouse 4 -> Distribution Center B",
+              "correct": true
+            },
+            "Inspector:": {
+              "expected": "J. Alvarez",
+              "extracted": "J. Alvarez",
+              "correct": true
+            },
+            "Status:": {
+              "expected": "PASSED",
+              "extracted": "PASSED",
+              "correct": true
+            }
+          },
+          "iou_per_field": {
+            "Report ID:": 0.9328,
+            "Date:": 0.946,
+            "Route:": 0.7926,
+            "Inspector:": 0.9838,
+            "Status:": 0.9573
+          }
+        },
+        {
+          "page": 2,
+          "timestamp": "2026-09-05T22:03:59.274216+00:00",
+          "elapsed_sec": 1.37,
+          "avg_confidence": 95.36666666666666,
+          "cer": 0.0025252525252525255,
+          "wer": 0.041666666666666664,
+          "fields_correct": 5,
+          "fields_total": 5,
+          "field_accuracy": 1.0,
+          "localization_fields_correct": 5,
+          "localization_fields_total": 5,
+          "avg_iou": 0.92250707455734,
+          "field_details": {
+            "Report ID:": {
+              "expected": "RPT-1001",
+              "extracted": "RPT-1001",
+              "correct": true
+            },
+            "Date:": {
+              "expected": "2025-04-14",
+              "extracted": "2025-04-14",
+              "correct": true
+            },
+            "Route:": {
+              "expected": "Warehouse 4 -> Distribution Center B",
+              "extracted": "Warehouse 4 -> Distribution Center B",
+              "correct": true
+            },
+            "Inspector:": {
+              "expected": "J. Alvarez",
+              "extracted": "J. Alvarez",
+              "correct": true
+            },
+            "Status:": {
+              "expected": "PASSED",
+              "extracted": "PASSED",
+              "correct": true
+            }
+          },
+          "iou_per_field": {
+            "Report ID:": 0.9328,
+            "Date:": 0.946,
+            "Route:": 0.7926,
+            "Inspector:": 0.9838,
+            "Status:": 0.9573
+          }
+        }
+      ]
+    },
+    "easyocr": {
+      "pages": [
+        {
+          "page": 1,
+          "timestamp": "2026-09-05T22:04:35.818301+00:00",
+          "elapsed_sec": 20.23,
+          "avg_confidence": 0.88,
+          "cer": 0.007575757575757576,
+          "wer": 0.041666666666666664,
+          "fields_correct": 3,
+          "fields_total": 5,
+          "field_accuracy": 0.6,
+          "localization_fields_correct": 5,
+          "localization_fields_total": 5,
+          "avg_iou": 0.6407317395640757,
+          "field_details": {
+            "Report ID:": {
+              "expected": "RPT-1000",
+              "extracted": "RPT-10oo",
+              "correct": false
+            },
+            "Date:": {
+              "expected": "2025-04-14",
+              "extracted": "2025-04-14",
+              "correct": true
+            },
+            "Route:": {
+              "expected": "Warehouse 4 -> Distribution Center B",
+              "extracted": "Warehouse 4 -> Distribution Center B",
+              "correct": true
+            },
+            "Inspector:": {
+              "expected": "J. Alvarez",
+              "extracted": "J Alvarez",
+              "correct": false
+            },
+            "Status:": {
+              "expected": "PASSED",
+              "extracted": "PASSED",
+              "correct": true
+            }
+          },
+          "iou_per_field": {
+            "Report ID:": 0.5796,
+            "Date:": 0.6365,
+            "Route:": 0.6232,
+            "Inspector:": 0.732,
+            "Status:": 0.6323
+          }
+        },
+        {
+          "page": 2,
+          "timestamp": "2026-09-05T22:04:53.243706+00:00",
+          "elapsed_sec": 17.41,
+          "avg_confidence": 0.8816,
+          "cer": 0.007575757575757576,
+          "wer": 0.041666666666666664,
+          "fields_correct": 3,
+          "fields_total": 5,
+          "field_accuracy": 0.6,
+          "localization_fields_correct": 5,
+          "localization_fields_total": 5,
+          "avg_iou": 0.6416591589189145,
+          "field_details": {
+            "Report ID:": {
+              "expected": "RPT-1001",
+              "extracted": "RPT-1oo1",
+              "correct": false
+            },
+            "Date:": {
+              "expected": "2025-04-14",
+              "extracted": "2025-04-14",
+              "correct": true
+            },
+            "Route:": {
+              "expected": "Warehouse 4 -> Distribution Center B",
+              "extracted": "Warehouse 4 -> Distribution Center B",
+              "correct": true
+            },
+            "Inspector:": {
+              "expected": "J. Alvarez",
+              "extracted": "J Alvarez",
+              "correct": false
+            },
+            "Status:": {
+              "expected": "PASSED",
+              "extracted": "PASSED",
+              "correct": true
+            }
+          },
+          "iou_per_field": {
+            "Report ID:": 0.5843,
+            "Date:": 0.6365,
+            "Route:": 0.6232,
+            "Inspector:": 0.732,
+            "Status:": 0.6323
+          }
+        }
+      ]
+    }
+  },
+  "resource_report": [
+    {
+      "timestamp": "2026-09-05T22:04:00",
+      "engine": "tesseract",
+      "folder": "sample-report",
+      "elapsed_sec": "3.79",
+      "ram_used_mb": "1130.48",
+      "cpu_percent": "0.4"
+    },
+    {
+      "timestamp": "2026-09-05T22:04:54",
+      "engine": "easyocr",
+      "folder": "sample-report",
+      "elapsed_sec": "47.02",
+      "ram_used_mb": "1383.43",
+      "cpu_percent": "2.7"
+    }
+  ]
+}

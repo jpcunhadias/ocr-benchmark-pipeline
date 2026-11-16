@@ -29,7 +29,7 @@ st.info(
 
     1. 🔍 **Select a run**: Use the sidebar to pick which pipeline run to inspect
     2. 📊 **Browse extractions**: See the cleaned OCR text extracted per page for that run
-    3. 🚀 **Run the pipeline**: See the "Run Pipeline" page (still a placeholder)
+    3. 🚀 **Run the pipeline**: Start a new run from the "Run Pipeline" page
     """
 )
 
